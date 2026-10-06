@@ -1,3 +1,4 @@
+import 'machine_map_page.dart';
 import 'package:flutter/material.dart';
 
 const pageBackground = Color(0xFFFFFBE8);
@@ -582,7 +583,7 @@ class _AppShellState extends State<AppShell> {
         onOpenStore: () => Navigator.of(context)
             .push(MaterialPageRoute<void>(builder: (_) => const StorePage())),
       ),
-      const MapPage(),
+      selectedIndex == 1 ? const MapPage() : const SizedBox.shrink(),
       const QrPage(),
       const ChatPage(),
       Mypage(
@@ -775,112 +776,8 @@ class InfoBanner extends StatelessWidget {
 
 class MapPage extends StatelessWidget {
   const MapPage({super.key});
-
   @override
-  Widget build(BuildContext context) => AppPage(
-    padding: EdgeInsets.zero,
-    child: Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
-          child: TextField(
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search),
-              hintText: '가까운 모약 자판기 검색',
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-        ),
-        Expanded(
-          child: Stack(
-            children: [
-              Container(
-                color: const Color(0xFFE8E6DD),
-                child: CustomPaint(
-                  painter: MapPatternPainter(),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-              const Center(
-                child: Icon(
-                  Icons.location_on,
-                  size: 52,
-                  color: Colors.lightBlue,
-                ),
-              ),
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(26),
-                    ),
-                  ),
-                  child: const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '3호관 2층 자판기',
-                        style: TextStyle(
-                          color: ink,
-                          fontSize: 19,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        '인하대학교 3호관 IT융합공학과 2층 로비 엘리베이터 앞',
-                        style: TextStyle(color: mutedInk, fontSize: 12),
-                      ),
-                      Divider(height: 28),
-                      Text(
-                        '실시간 재고',
-                        style: TextStyle(color: mutedInk, fontSize: 12),
-                      ),
-                      Text(
-                        '여유 있음 (80%)',
-                        style: TextStyle(
-                          color: Color(0xFF00B957),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class MapPatternPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(.75)
-      ..strokeWidth = 3;
-    for (var x = -size.height; x < size.width + size.height; x += 70) {
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x + size.height, size.height),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget build(BuildContext context) => const MachineMapPage();
 }
 
 class Mypage extends StatelessWidget {
