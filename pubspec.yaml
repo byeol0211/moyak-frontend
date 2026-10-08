@@ -1,0 +1,34 @@
+name: moyak
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_svg: ^2.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/figma/splash_welcome.png
+    - assets/figma/camera_permission.svg
+    - assets/figma/location_permission.svg
+    - assets/figma/microphone_permission.svg
+    - assets/figma/chevron_left.svg
+    - assets/figma/password_eye.svg
+    - assets/figma/password_eye_off.svg
+    - assets/figma/onboarding_chat_preview.png
+    - assets/figma/onboarding_vending_preview.png
+    - assets/figma/onboarding_video_preview.png
+    - assets/figma/email_verification.svg
+    - assets/figma/shield_verification.svg
+    - assets/figma/check_verification.svg
