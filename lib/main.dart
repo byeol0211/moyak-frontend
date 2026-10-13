@@ -1,4 +1,7 @@
+import 'chatbot_page.dart';
+import 'workflow_purchase_page.dart';
 import 'machine_map_page.dart';
+import 'consultation_page.dart';
 import 'package:flutter/material.dart';
 
 const pageBackground = Color(0xFFFFFBE8);
@@ -42,7 +45,7 @@ class MoyakApp extends StatelessWidget {
           hintStyle: const TextStyle(color: mutedInk, fontSize: 15),
         ),
       ),
-      home: const SplashPage(),
+      home: Uri.base.queryParameters['role'] == 'pharmacist' ? const ConsultationPage() : const SplashPage(),
     );
   }
 }
@@ -584,12 +587,12 @@ class _AppShellState extends State<AppShell> {
             .push(MaterialPageRoute<void>(builder: (_) => const StorePage())),
       ),
       selectedIndex == 1 ? const MapPage() : const SizedBox.shrink(),
-      const QrPage(),
+      selectedIndex == 2 ? const WorkflowPurchasePage() : const SizedBox.shrink(),
       const ChatPage(),
       Mypage(
         onOpenPermit: () => Navigator.of(
           context,
-        ).push(MaterialPageRoute<void>(builder: (_) => const PermitListPage())),
+        ).push(MaterialPageRoute<void>(builder: (_) => const WorkflowPurchasePage())),
         onOpenInventory: () => Navigator.of(context).push(
           MaterialPageRoute<void>(builder: (_) => const InventoryRequestPage()),
         ),
@@ -996,109 +999,7 @@ class QrPage extends StatelessWidget {
 class ChatPage extends StatelessWidget {
   const ChatPage({super.key});
   @override
-  Widget build(BuildContext context) => AppPage(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(Icons.chevron_left, size: 30),
-            ),
-            const CircleAvatar(
-              backgroundColor: Color(0xFFFFF0B4),
-              child: Icon(Icons.medical_services_outlined, color: brandYellow),
-            ),
-            const SizedBox(width: 10),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '모약이',
-                  style: TextStyle(
-                    color: ink,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  '● 상담 가능',
-                  style: TextStyle(color: Color(0xFF18B55B), fontSize: 11),
-                ),
-              ],
-            ),
-            const Spacer(),
-            const Icon(Icons.phone_outlined, color: mutedInk),
-            const SizedBox(width: 15),
-            const Icon(Icons.search, color: mutedInk),
-          ],
-        ),
-        const Divider(),
-        const SizedBox(height: 18),
-        const Text(
-          '오늘',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: mutedInk, fontSize: 11),
-        ),
-        const SizedBox(height: 18),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const CircleAvatar(
-              backgroundColor: Color(0xFFFFF0B4),
-              child: Icon(Icons.medical_services_outlined, color: brandYellow),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              constraints: const BoxConstraints(maxWidth: 260),
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: const Text(
-                '안녕하세요! 자판기 건강 헬퍼 모약이입니다. 무엇을 도와드릴까요?',
-                style: TextStyle(color: ink, height: 1.45),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            const SizedBox(width: 64),
-            OutlinedButton(onPressed: () {}, child: const Text('약품 정보')),
-            const SizedBox(width: 8),
-            OutlinedButton(onPressed: () {}, child: const Text('상담하기')),
-          ],
-        ),
-        const Spacer(),
-        Row(
-          children: [
-            const CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Icon(Icons.add, color: mutedInk),
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: '메시지를 입력하세요...',
-                  fillColor: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            const CircleAvatar(
-              backgroundColor: brandYellow,
-              child: Icon(Icons.arrow_upward, color: Colors.white),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) => const AppPage(child: ChatbotPage());
 }
 
 class PermitListPage extends StatelessWidget {
