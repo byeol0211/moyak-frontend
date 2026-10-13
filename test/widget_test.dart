@@ -12,10 +12,13 @@ import 'package:moyak/main.dart';
 void main() {
   testWidgets('shows the login screen after splash', (WidgetTester tester) async {
     await tester.pumpWidget(const MoyakApp());
-    expect(find.text('MOYAK'), findsOneWidget);
+    expect(find.bySemanticsLabel('모약이에 온 걸 환영해! 약 자판기 마스코트'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 900));
-    await tester.pump();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('허용하기'));
+    await tester.pumpAndSettle();
 
     expect(find.text('로그인'), findsNWidgets(2));
     expect(find.text('아이디'), findsOneWidget);

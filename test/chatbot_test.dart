@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:moyak/chatbot_page.dart';
+import 'package:moyak/main.dart';
 
 void main() {
   testWidgets('sends question and carries successful conversation history', (
@@ -25,7 +25,7 @@ void main() {
     });
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: ChatbotPage(client: client)),
+        home: Scaffold(body: ChatPage(client: client)),
       ),
     );
     await tester.enterText(find.byType(TextField), 'first');
@@ -50,7 +50,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: ChatbotPage(client: client)),
+        home: Scaffold(body: ChatPage(client: client)),
       ),
     );
     await tester.enterText(find.byType(TextField), 'question');

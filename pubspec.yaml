@@ -10,11 +10,10 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_map: ^8.3.2
+  flutter_svg: ^2.2.0
   http: ^1.6.0
   latlong2: ^0.10.1
   url_launcher: ^6.3.3
-  web: ^1.1.1
-  web_socket_channel: ^3.0.3
 
 dev_dependencies:
   flutter_test:
@@ -23,3 +22,17 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/figma/splash_welcome.png
+    - assets/figma/camera_permission.svg
+    - assets/figma/location_permission.svg
+    - assets/figma/microphone_permission.svg
+    - assets/figma/chevron_left.svg
+    - assets/figma/password_eye.svg
+    - assets/figma/password_eye_off.svg
+    - assets/figma/onboarding_chat_preview.png
+    - assets/figma/onboarding_vending_preview.png
+    - assets/figma/onboarding_video_preview.png
+    - assets/figma/email_verification.svg
+    - assets/figma/shield_verification.svg
+    - assets/figma/check_verification.svg
