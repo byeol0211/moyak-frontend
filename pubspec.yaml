@@ -21,16 +21,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/figma/splash_welcome.png
-    - assets/figma/camera_permission.svg
-    - assets/figma/location_permission.svg
-    - assets/figma/microphone_permission.svg
-    - assets/figma/chevron_left.svg
-    - assets/figma/password_eye.svg
-    - assets/figma/password_eye_off.svg
-    - assets/figma/onboarding_chat_preview.png
-    - assets/figma/onboarding_vending_preview.png
-    - assets/figma/onboarding_video_preview.png
-    - assets/figma/email_verification.svg
-    - assets/figma/shield_verification.svg
-    - assets/figma/check_verification.svg
+    - assets/figma/

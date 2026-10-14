@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../widgets/app_status_bar.dart';
+
 const _canvas = Color(0xFFF2EBDD);
 const _darkBrown = Color(0xFF3E2723);
 const _secondaryBrown = Color(0xFF8D7F79);
@@ -10,11 +12,13 @@ class MainHomeDisconnectedScreen extends StatelessWidget {
   const MainHomeDisconnectedScreen({
     required this.onScanQr,
     required this.onRescanDevice,
+    this.isScanning = false,
     super.key,
   });
 
   final VoidCallback onScanQr;
   final VoidCallback onRescanDevice;
+  final bool isScanning;
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
@@ -28,20 +32,31 @@ class MainHomeDisconnectedScreen extends StatelessWidget {
     child: Container(
       color: _canvas,
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 36, 24, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _HomeHeader(onScanQr: onScanQr),
-              const SizedBox(height: 26),
-              const _HomeInfoBanner(),
-              const SizedBox(height: 20),
-              Expanded(
-                child: _DisconnectedCard(onRescanDevice: onRescanDevice),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const AppStatusBar(),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _HomeHeader(onScanQr: onScanQr),
+                    const SizedBox(height: 26),
+                    const _HomeInfoBanner(),
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: _DisconnectedCard(
+                        onRescanDevice: onRescanDevice,
+                        isScanning: isScanning,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     ),
@@ -70,18 +85,26 @@ class MainHomeConnectedScreen extends StatelessWidget {
     child: Container(
       color: _canvas,
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 36, 24, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _HomeHeader(onScanQr: onScanQr),
-              const SizedBox(height: 26),
-              const _HomeInfoBanner(),
-              const SizedBox(height: 20),
-              Expanded(child: _ConnectedCard(onOpenStore: onOpenStore)),
-            ],
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const AppStatusBar(),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _HomeHeader(onScanQr: onScanQr),
+                    const SizedBox(height: 26),
+                    const _HomeInfoBanner(),
+                    const SizedBox(height: 20),
+                    Expanded(child: _ConnectedCard(onOpenStore: onOpenStore)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     ),
@@ -194,9 +217,13 @@ class _HomeInfoBanner extends StatelessWidget {
 }
 
 class _DisconnectedCard extends StatelessWidget {
-  const _DisconnectedCard({required this.onRescanDevice});
+  const _DisconnectedCard({
+    required this.onRescanDevice,
+    required this.isScanning,
+  });
 
   final VoidCallback onRescanDevice;
+  final bool isScanning;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -237,47 +264,13 @@ class _DisconnectedCard extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) => Stack(
-              alignment: Alignment.center,
-              children: [
-                Image.asset(
-                  'assets/figma/splash_mascot.png',
-                  width: 180,
-                  height: 216,
-                  fit: BoxFit.contain,
-                  semanticLabel: '모약 자판기 마스코트',
-                ),
-                Positioned(
-                  left: constraints.maxWidth * 0.12,
-                  top: constraints.maxHeight * 0.17,
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _darkBrown, width: 1.5),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x10000000),
-                          blurRadius: 5,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text(
-                      '?',
-                      style: TextStyle(
-                        color: _darkBrown,
-                        fontSize: 27,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+          child: Center(
+            child: Image.asset(
+              'assets/figma/moyak_2.png',
+              width: 200,
+              height: 188,
+              fit: BoxFit.contain,
+              semanticLabel: '자판기를 찾는 모약 마스코트',
             ),
           ),
         ),
@@ -307,11 +300,20 @@ class _DisconnectedCard extends StatelessWidget {
           height: 48,
           width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: onRescanDevice,
-            icon: const Icon(Icons.refresh, size: 20),
-            label: const Text('기기 재탐색'),
+            onPressed: isScanning ? null : onRescanDevice,
+            icon: isScanning
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(
+                      color: _brandYellow,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Icon(Icons.refresh, size: 20),
+            label: Text(isScanning ? '주변 기기 탐색 중...' : '기기 재탐색'),
             style: OutlinedButton.styleFrom(
               foregroundColor: _brandYellow,
+              disabledForegroundColor: _brandYellow,
               side: const BorderSide(color: _brandYellow, width: 1.2),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
@@ -375,9 +377,9 @@ class _ConnectedCard extends StatelessWidget {
         Expanded(
           child: Center(
             child: Image.asset(
-              'assets/figma/splash_mascot.png',
-              width: 160,
-              height: 205,
+              'assets/figma/moyak_1.png',
+              width: 200,
+              height: 200,
               fit: BoxFit.contain,
               semanticLabel: '모약 자판기 마스코트',
             ),

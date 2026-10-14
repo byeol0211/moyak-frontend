@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 
+import '../../widgets/app_status_bar.dart';
+
 const _mapCanvas = Color(0xFFF1EEE5);
 const _mapInk = Color(0xFF3E2723);
 const _mapMuted = Color(0xFF8D7F79);
@@ -116,112 +118,119 @@ class _MapScreenState extends State<MapScreen> {
       color: _mapCanvas,
       child: SafeArea(
         bottom: false,
-        child: Stack(
-          fit: StackFit.expand,
+        child: Column(
           children: [
-            if (AuthRepository.isInitialized)
-              KakaoMap(
-                center: _selected == null ? _defaultCenter : _point(_selected!),
-                currentLevel: 3,
-                onMapCreated: (controller) => _map = controller,
-                widgetOverlays: [
-                  for (final m in _filtered)
-                    KakaoMapWidgetOverlay(
-                      id: '${m['id']}',
-                      position: _point(m),
-                      anchor: Alignment.bottomCenter,
-                      child: m['id'] == _selected?['id']
-                          ? _SelectedVendingMarker(label: m['name'] as String)
-                          : GestureDetector(
-                              onTap: () => _select(m),
-                              child: Tooltip(
-                                message: m['name'] as String,
-                                child: const _VendingMarker(),
-                              ),
-                            ),
-                    ),
-                ],
-              )
-            else
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: _MapNotice(
-                    text: '카카오 지도 키가 설정되지 않았습니다. lib/kakao_config.dart 에 JavaScript 키를 넣어주세요.',
-                    error: true,
-                  ),
-                ),
-              ),
-            Positioned(
-              top: 16,
-              left: 16,
-              right: 16,
-              child: KakaoMapPointerInterceptor(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _SearchBar(
-                      controller: _search,
-                      loading: _loading,
-                      onRefresh: _load,
-                      onChanged: (_) => setState(() {
-                        if (!_filtered.any(
-                          (m) => m['id'] == _selected?['id'],
-                        )) {
-                          _selected = null;
-                        }
-                      }),
-                      onSubmitted: (_) {
-                        if (_filtered.isNotEmpty) _select(_filtered.first);
-                      },
-                    ),
-                    if (_loading) ...[
-                      const SizedBox(height: 8),
-                      const LinearProgressIndicator(
-                        color: _mapYellow,
-                        backgroundColor: Color(0xFFFFF6D8),
-                      ),
-                    ],
-                    if (_error != null) ...[
-                      const SizedBox(height: 8),
-                      _MapNotice(text: _error!, error: true),
-                    ] else if (!_loading) ...[
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
+            const AppStatusBar(),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (AuthRepository.isInitialized)
+                    KakaoMap(
+                      center: _selected == null ? _defaultCenter : _point(_selected!),
+                      currentLevel: 3,
+                      onMapCreated: (controller) => _map = controller,
+                      widgetOverlays: [
+                        for (final m in _filtered)
+                          KakaoMapWidgetOverlay(
+                            id: '${m['id']}',
+                            position: _point(m),
+                            anchor: Alignment.bottomCenter,
+                            child: m['id'] == _selected?['id']
+                                ? _SelectedVendingMarker(label: m['name'] as String)
+                                : GestureDetector(
+                                    onTap: () => _select(m),
+                                    child: Tooltip(
+                                      message: m['name'] as String,
+                                      child: const _VendingMarker(),
+                                    ),
+                                  ),
+                          ),
+                      ],
+                    )
+                  else
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
                         child: _MapNotice(
-                          text:
-                              '$_source ${_filtered.length}곳${_limited ? ' · 최대 500곳 표시' : ''}',
+                          text: '카카오 지도 키가 설정되지 않았습니다. lib/kakao_config.dart 에 JavaScript 키를 넣어주세요.',
+                          error: true,
                         ),
                       ),
-                    ],
-                  ],
-                ),
+                    ),
+                  Positioned(
+                    top: 16,
+                    left: 16,
+                    right: 16,
+                    child: KakaoMapPointerInterceptor(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _SearchBar(
+                            controller: _search,
+                            loading: _loading,
+                            onRefresh: _load,
+                            onChanged: (_) => setState(() {
+                              if (!_filtered.any(
+                                (m) => m['id'] == _selected?['id'],
+                              )) {
+                                _selected = null;
+                              }
+                            }),
+                            onSubmitted: (_) {
+                              if (_filtered.isNotEmpty) _select(_filtered.first);
+                            },
+                          ),
+                          if (_loading) ...[
+                            const SizedBox(height: 8),
+                            const LinearProgressIndicator(
+                              color: _mapYellow,
+                              backgroundColor: Color(0xFFFFF6D8),
+                            ),
+                          ],
+                          if (_error != null) ...[
+                            const SizedBox(height: 8),
+                            _MapNotice(text: _error!, error: true),
+                          ] else if (!_loading) ...[
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: _MapNotice(
+                                text:
+                                    '$_source ${_filtered.length}곳${_limited ? ' · 최대 500곳 표시' : ''}',
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_selected != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: KakaoMapPointerInterceptor(
+                        child: _StoreSheet(
+                          machine: _selected!,
+                          onOpenStore: widget.onOpenStore,
+                        ),
+                      ),
+                    )
+                  else if (!_loading && _error == null)
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
+                      child: _MapNotice(
+                        text: _items.isEmpty
+                            ? '위치가 등록된 운영 자판기가 없습니다.'
+                            : '검색 결과를 선택하거나 다른 이름으로 검색해주세요.',
+                      ),
+                    ),
+                ],
               ),
             ),
-            if (_selected != null)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: KakaoMapPointerInterceptor(
-                  child: _StoreSheet(
-                    machine: _selected!,
-                    onOpenStore: widget.onOpenStore,
-                  ),
-                ),
-              )
-            else if (!_loading && _error == null)
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 16,
-                child: _MapNotice(
-                  text: _items.isEmpty
-                      ? '위치가 등록된 운영 자판기가 없습니다.'
-                      : '검색 결과를 선택하거나 다른 이름으로 검색해주세요.',
-                ),
-              ),
           ],
         ),
       ),
