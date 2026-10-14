@@ -9,11 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_map: ^8.3.2
   flutter_svg: ^2.2.0
   http: ^1.6.0
-  latlong2: ^0.10.1
-  url_launcher: ^6.3.3
+  kakao_map_plugin: ^1.0.0
 
 dev_dependencies:
   flutter_test:

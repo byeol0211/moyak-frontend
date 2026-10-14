@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:kakao_map_plugin/kakao_map_plugin.dart' show AuthRepository;
 
+import 'kakao_config.dart';
 import 'screens/login_page.dart';
 import 'screens/main_home_disconnected_screen.dart';
 import 'screens/map_screen/map_screen.dart';
@@ -19,7 +21,15 @@ const brandYellow = Color(0xFFF1C744);
 const ink = Color(0xFF252525);
 const mutedInk = Color(0xFF8C8B82);
 
-void main() => runApp(const MoyakApp());
+void main() {
+  if (kakaoJavaScriptKey.isNotEmpty) {
+    AuthRepository.initialize(
+      appKey: kakaoJavaScriptKey,
+      baseUrl: kakaoSiteDomain,
+    );
+  }
+  runApp(const MoyakApp());
+}
 
 class MoyakApp extends StatelessWidget {
   const MoyakApp({super.key});

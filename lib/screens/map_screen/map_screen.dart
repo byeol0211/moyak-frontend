@@ -2,10 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
-import 'package:latlong2/latlong.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 
 import '../../widgets/app_status_bar.dart';
 
@@ -14,7 +12,7 @@ const _mapInk = Color(0xFF3E2723);
 const _mapMuted = Color(0xFF8D7F79);
 const _mapYellow = Color(0xFFFFD54F);
 
-const _defaultCenter = LatLng(37.4509, 126.6539);
+final _defaultCenter = LatLng(37.4509, 126.6539);
 
 class MapScreen extends StatefulWidget {
   const MapScreen({required this.onOpenStore, this.client, super.key});
@@ -27,14 +25,14 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  final _map = MapController();
+  KakaoMapController? _map;
   late final http.Client _client = widget.client ?? http.Client();
   final _search = TextEditingController();
   List<Map<String, dynamic>> _items = [];
   Map<String, dynamic>? _selected;
   String? _error;
   String _source = '';
-  bool _loading = true, _ready = false, _limited = false;
+  bool _loading = true, _limited = false;
 
   LatLng _point(Map<String, dynamic> m) => LatLng(
     (m['latitude'] as num).toDouble(),
@@ -85,7 +83,7 @@ class _MapScreenState extends State<MapScreen> {
         _limited = data['truncated'] == true;
         _selected = _filtered.isEmpty ? null : _filtered.first;
       });
-      if (_ready && _selected != null) _map.move(_point(_selected!), 16);
+      if (_selected != null) _map?.panTo(_point(_selected!));
     } catch (e) {
       if (mounted) {
         setState(() => _error = '자판기 위치를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
@@ -97,13 +95,12 @@ class _MapScreenState extends State<MapScreen> {
 
   void _select(Map<String, dynamic> item) {
     setState(() => _selected = item);
-    if (_ready) _map.move(_point(item), 16);
+    _map?.panTo(_point(item));
   }
 
   @override
   void dispose() {
     if (widget.client == null) _client.close();
-    _map.dispose();
     _search.dispose();
     super.dispose();
   }
@@ -128,107 +125,84 @@ class _MapScreenState extends State<MapScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  FlutterMap(
-                    mapController: _map,
-                    options: MapOptions(
-                      initialCenter: _selected == null
-                          ? _defaultCenter
-                          : _point(_selected!),
-                      initialZoom: 16,
-                      minZoom: 3,
-                      maxZoom: 19,
-                      onMapReady: () => _ready = true,
-                    ),
-                    children: [
-                      TileLayer(
-                        tileDisplay: const TileDisplay.instantaneous(),
-                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.moyak.app',
-                        maxNativeZoom: 19,
-                        panBuffer: 0,
-                      ),
-                      MarkerLayer(
-                        markers: [
-                          for (final m in _filtered)
-                            m['id'] == _selected?['id']
-                                ? Marker(
-                                    point: _point(m),
-                                    width: 140,
-                                    height: 96,
-                                    alignment: Alignment.topCenter,
-                                    child: _SelectedVendingMarker(
-                                      label: m['name'] as String,
-                                    ),
-                                  )
-                                : Marker(
-                                    point: _point(m),
-                                    width: 80,
-                                    height: 60,
-                                    alignment: Alignment.topCenter,
-                                    child: GestureDetector(
-                                      onTap: () => _select(m),
-                                      child: Tooltip(
-                                        message: m['name'] as String,
-                                        child: const _VendingMarker(),
-                                      ),
+                  if (AuthRepository.isInitialized)
+                    KakaoMap(
+                      center: _selected == null ? _defaultCenter : _point(_selected!),
+                      currentLevel: 3,
+                      onMapCreated: (controller) => _map = controller,
+                      widgetOverlays: [
+                        for (final m in _filtered)
+                          KakaoMapWidgetOverlay(
+                            id: '${m['id']}',
+                            position: _point(m),
+                            anchor: Alignment.bottomCenter,
+                            child: m['id'] == _selected?['id']
+                                ? _SelectedVendingMarker(label: m['name'] as String)
+                                : GestureDetector(
+                                    onTap: () => _select(m),
+                                    child: Tooltip(
+                                      message: m['name'] as String,
+                                      child: const _VendingMarker(),
                                     ),
                                   ),
-                        ],
-                      ),
-                      RichAttributionWidget(
-                        alignment: AttributionAlignment.bottomLeft,
-                        attributions: [
-                          TextSourceAttribution(
-                            'OpenStreetMap contributors',
-                            onTap: () => launchUrl(
-                              Uri.parse('https://www.openstreetmap.org/copyright'),
-                            ),
                           ),
-                        ],
+                      ],
+                    )
+                  else
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: _MapNotice(
+                          text: '카카오 지도 키가 설정되지 않았습니다. lib/kakao_config.dart 에 JavaScript 키를 넣어주세요.',
+                          error: true,
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
                   Positioned(
                     top: 16,
                     left: 16,
                     right: 16,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _SearchBar(
-                          controller: _search,
-                          loading: _loading,
-                          onRefresh: _load,
-                          onChanged: (_) => setState(() {
-                            if (!_filtered.any((m) => m['id'] == _selected?['id'])) {
-                              _selected = null;
-                            }
-                          }),
-                          onSubmitted: (_) {
-                            if (_filtered.isNotEmpty) _select(_filtered.first);
-                          },
-                        ),
-                        if (_loading) ...[
-                          const SizedBox(height: 8),
-                          const LinearProgressIndicator(
-                            color: _mapYellow,
-                            backgroundColor: Color(0xFFFFF6D8),
+                    child: KakaoMapPointerInterceptor(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _SearchBar(
+                            controller: _search,
+                            loading: _loading,
+                            onRefresh: _load,
+                            onChanged: (_) => setState(() {
+                              if (!_filtered.any(
+                                (m) => m['id'] == _selected?['id'],
+                              )) {
+                                _selected = null;
+                              }
+                            }),
+                            onSubmitted: (_) {
+                              if (_filtered.isNotEmpty) _select(_filtered.first);
+                            },
                           ),
-                        ],
-                        if (_error != null) ...[
-                          const SizedBox(height: 8),
-                          _MapNotice(text: _error!, error: true),
-                        ] else if (!_loading) ...[
-                          const SizedBox(height: 8),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: _MapNotice(
-                              text:
-                                  '$_source ${_filtered.length}곳${_limited ? ' · 최대 500곳 표시' : ''}',
+                          if (_loading) ...[
+                            const SizedBox(height: 8),
+                            const LinearProgressIndicator(
+                              color: _mapYellow,
+                              backgroundColor: Color(0xFFFFF6D8),
                             ),
-                          ),
+                          ],
+                          if (_error != null) ...[
+                            const SizedBox(height: 8),
+                            _MapNotice(text: _error!, error: true),
+                          ] else if (!_loading) ...[
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: _MapNotice(
+                                text:
+                                    '$_source ${_filtered.length}곳${_limited ? ' · 최대 500곳 표시' : ''}',
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                   if (_selected != null)
@@ -236,9 +210,11 @@ class _MapScreenState extends State<MapScreen> {
                       left: 0,
                       right: 0,
                       bottom: 0,
-                      child: _StoreSheet(
-                        machine: _selected!,
-                        onOpenStore: widget.onOpenStore,
+                      child: KakaoMapPointerInterceptor(
+                        child: _StoreSheet(
+                          machine: _selected!,
+                          onOpenStore: widget.onOpenStore,
+                        ),
                       ),
                     )
                   else if (!_loading && _error == null)
@@ -282,7 +258,11 @@ class _SearchBar extends StatelessWidget {
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(16),
       boxShadow: const [
-        BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 3)),
+        BoxShadow(
+          color: Color(0x14000000),
+          blurRadius: 10,
+          offset: Offset(0, 3),
+        ),
       ],
     ),
     child: TextField(
@@ -327,7 +307,11 @@ class _MapNotice extends StatelessWidget {
       color: error ? const Color(0xFFFFF1EE) : Colors.white,
       borderRadius: BorderRadius.circular(12),
       boxShadow: const [
-        BoxShadow(color: Color(0x10000000), blurRadius: 6, offset: Offset(0, 2)),
+        BoxShadow(
+          color: Color(0x10000000),
+          blurRadius: 6,
+          offset: Offset(0, 2),
+        ),
       ],
     ),
     child: Text(
