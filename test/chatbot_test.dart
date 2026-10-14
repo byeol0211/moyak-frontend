@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:moyak/main.dart';
+import 'package:moyak/screens/chatbot_screen.dart';
 
 void main() {
   testWidgets('sends question and carries successful conversation history', (

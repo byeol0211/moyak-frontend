@@ -1,18 +1,21 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:kakao_map_plugin/kakao_map_plugin.dart' show AuthRepository;
 
+import 'data/demo_data.dart';
+import 'data/models.dart';
 import 'kakao_config.dart';
+import 'screens/chatbot_screen.dart';
+import 'screens/consult_history_screen.dart';
 import 'screens/login_page.dart';
 import 'screens/main_home_disconnected_screen.dart';
 import 'screens/map_screen/map_screen.dart';
+import 'screens/consultation_screen.dart';
 import 'screens/permission_screen.dart';
+import 'screens/permit_list_screen.dart';
 import 'screens/qr_camera_page.dart';
 import 'screens/screen_flows.dart';
-import 'screens/video_consultation_page.dart';
+import 'utils/format.dart';
 import 'widgets/app_status_bar.dart';
 
 const pageBackground = Color(0xFFFFFBE8);
@@ -143,9 +146,8 @@ LoginPage _createLoginPage(NavigatorState navigator) => LoginPage(
   onLogin: () => _openOnboardingFlow(navigator),
   onSignup: () => navigator.push(
     MaterialPageRoute<void>(
-      builder: (_) => SignupFlow(
-        onComplete: () => _openOnboardingFlow(navigator),
-      ),
+      builder: (_) =>
+          SignupFlow(onComplete: () => _openOnboardingFlow(navigator)),
     ),
   ),
 );
@@ -159,237 +161,6 @@ void _openOnboardingFlow(NavigatorState navigator) {
         ),
       ),
     ),
-  );
-}
-
-class BrandMark extends StatelessWidget {
-  const BrandMark({required this.size, super.key});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    'MOYAK',
-    textAlign: TextAlign.center,
-    style: TextStyle(
-      color: brandYellow,
-      fontSize: size,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 2,
-    ),
-  );
-}
-
-class SignupPage extends StatefulWidget {
-  const SignupPage({super.key});
-
-  @override
-  State<SignupPage> createState() => _SignupPageState();
-}
-
-class _SignupPageState extends State<SignupPage> {
-  int step = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final titles = ['아이디 설정', '비밀번호 설정', '본인 인증'];
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () => step == 0
-                        ? Navigator.of(context).pop()
-                        : setState(() => step--),
-                    icon: const Icon(Icons.chevron_left, size: 30),
-                  ),
-                  const Expanded(
-                    child: Text(
-                      '회원가입',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: ink,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 48),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    titles[step],
-                    style: const TextStyle(
-                      color: brandYellow,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    '${step + 1} / 3',
-                    style: const TextStyle(
-                      color: mutedInk,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: (step + 1) / 3,
-                  minHeight: 6,
-                  backgroundColor: const Color(0xFFEDE9E7),
-                  color: brandYellow,
-                ),
-              ),
-              const SizedBox(height: 25),
-              Expanded(child: _SignupStep(step: step)),
-              PrimaryButton(
-                label: step == 2 ? '완료' : '다음',
-                onPressed: () => step == 2
-                    ? Navigator.of(context).pop()
-                    : setState(() => step++),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SignupStep extends StatelessWidget {
-  const _SignupStep({required this.step});
-
-  final int step;
-
-  @override
-  Widget build(BuildContext context) {
-    if (step == 0) {
-      return const Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '사용하실 아이디를 입력해주세요',
-            style: TextStyle(color: mutedInk, fontWeight: FontWeight.w600),
-          ),
-          SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(hintText: '아이디 입력'),
-                ),
-              ),
-              SizedBox(width: 10),
-              SizedBox(
-                width: 88,
-                height: 52,
-                child: _DarkButton(label: '중복확인'),
-              ),
-            ],
-          ),
-          SizedBox(height: 8),
-          Text(
-            '✓ 사용 가능한 아이디입니다.',
-            style: TextStyle(color: Color(0xFF418844), fontSize: 13),
-          ),
-        ],
-      );
-    }
-    if (step == 1) {
-      return const Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          LabeledField(label: '비밀번호', hint: '비밀번호를 입력해주세요', obscureText: true),
-          SizedBox(height: 18),
-          LabeledField(
-            label: '비밀번호 확인',
-            hint: '비밀번호를 다시 입력해주세요',
-            obscureText: true,
-          ),
-          SizedBox(height: 8),
-          Text(
-            '✓ 영문, 숫자, 특수문자 조합 8자 이상 충족',
-            style: TextStyle(color: Color(0xFF418844), fontSize: 13),
-          ),
-        ],
-      );
-    }
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          '원활한 약품 결제를 위해 인증 방식을 선택해주세요',
-          style: TextStyle(color: mutedInk, fontWeight: FontWeight.w600),
-        ),
-        SizedBox(height: 20),
-        VerificationCard(
-          icon: Icons.mail_outline,
-          title: '이메일 인증',
-          description: '등록된 이메일 계정으로 인증 메일을\n보냅니다.',
-          selected: true,
-        ),
-        SizedBox(height: 12),
-        VerificationCard(
-          icon: Icons.shield_outlined,
-          title: '간편인증',
-          description: '카카오, 토스 등 민간인증서로 빠르게\n인증합니다.',
-          selected: false,
-        ),
-      ],
-    );
-  }
-}
-
-class LabeledField extends StatelessWidget {
-  const LabeledField({
-    required this.label,
-    required this.hint,
-    this.obscureText = false,
-    super.key,
-  });
-
-  final String label;
-  final String hint;
-  final bool obscureText;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(
-        label,
-        style: const TextStyle(
-          color: mutedInk,
-          fontWeight: FontWeight.w600,
-          fontSize: 13,
-        ),
-      ),
-      const SizedBox(height: 8),
-      TextField(
-        obscureText: obscureText,
-        decoration: InputDecoration(
-          hintText: hint,
-          suffixIcon: obscureText
-              ? const Icon(
-                  Icons.visibility_off_outlined,
-                  color: Color(0xFFB9AAA4),
-                )
-              : null,
-        ),
-      ),
-    ],
   );
 }
 
@@ -419,157 +190,6 @@ class PrimaryButton extends StatelessWidget {
   );
 }
 
-class SocialDivider extends StatelessWidget {
-  const SocialDivider({super.key});
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      const Expanded(child: Divider(color: Color(0xFFEDE7E4))),
-      const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 12),
-        child: Text(
-          'SNS 간편 로그인',
-          style: TextStyle(color: Color(0xFFB9AAA4), fontSize: 12),
-        ),
-      ),
-      const Expanded(child: Divider(color: Color(0xFFEDE7E4))),
-    ],
-  );
-}
-
-class SocialButton extends StatelessWidget {
-  const SocialButton({
-    required this.label,
-    required this.color,
-    this.textColor = Colors.white,
-    this.outlined = false,
-    super.key,
-  });
-
-  final String label;
-  final Color color;
-  final Color textColor;
-  final bool outlined;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 48,
-    height: 48,
-    decoration: BoxDecoration(
-      color: color,
-      shape: BoxShape.circle,
-      border: outlined ? Border.all(color: const Color(0xFFE8E1DE)) : null,
-    ),
-    child: Center(
-      child: Text(
-        label,
-        style: TextStyle(
-          color: textColor,
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    ),
-  );
-}
-
-class _DarkButton extends StatelessWidget {
-  const _DarkButton({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => FilledButton(
-    onPressed: () {},
-    style: FilledButton.styleFrom(
-      backgroundColor: const Color(0xFF392927),
-      foregroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    ),
-    child: Text(label),
-  );
-}
-
-class VerificationCard extends StatelessWidget {
-  const VerificationCard({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.selected,
-    super.key,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(15),
-      border: Border.all(
-        color: selected ? brandYellow : const Color(0xFFEDE7E4),
-        width: selected ? 2 : 1,
-      ),
-      boxShadow: selected
-          ? null
-          : const [
-              BoxShadow(
-                color: Color(0x0A000000),
-                blurRadius: 12,
-                offset: Offset(0, 5),
-              ),
-            ],
-    ),
-    child: Row(
-      children: [
-        CircleAvatar(
-          backgroundColor: selected
-              ? const Color(0xFFFFF9D8)
-              : const Color(0xFFF5F3F2),
-          foregroundColor: selected ? brandYellow : mutedInk,
-          child: Icon(icon),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: ink,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                description,
-                style: const TextStyle(
-                  color: mutedInk,
-                  fontSize: 12,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
-        ),
-        CircleAvatar(
-          radius: 12,
-          backgroundColor: selected ? brandYellow : const Color(0xFFEDE9E7),
-          foregroundColor: Colors.white,
-          child: Icon(selected ? Icons.check : Icons.check, size: 16),
-        ),
-      ],
-    ),
-  );
-}
-
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -579,10 +199,32 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int selectedIndex = 0;
-  bool _isVendingMachineConnected = false;
   bool _isScanningDevices = false;
+  bool _isLoadingStore = false;
 
-  void selectTab(int index) => setState(() => selectedIndex = index);
+  /// 연결된(선택한) 자판기. null이면 연결 없음 홈을 보여준다.
+  VendingMachine? _connectedMachine;
+
+  // 상담 탭에 들어올 때마다 새 상담 요청이 시작되도록 키를 바꾼다.
+  int _consultSession = 0;
+  bool _consultFromChatbot = false;
+
+  void selectTab(int index) {
+    if (index == 2) {
+      _openConsultation(fromChatbot: false);
+      return;
+    }
+    setState(() => selectedIndex = index);
+  }
+
+  void _openConsultation({required bool fromChatbot}) {
+    if (selectedIndex == 2 && !fromChatbot) return;
+    setState(() {
+      _consultSession++;
+      _consultFromChatbot = fromChatbot;
+      selectedIndex = 2;
+    });
+  }
 
   // 기기 탐색 API가 아직 없어 주변 자판기를 찾은 것처럼 잠시 기다린 뒤 연결한다.
   Future<void> _rescanDevices() async {
@@ -591,64 +233,148 @@ class _AppShellState extends State<AppShell> {
     await Future<void>.delayed(const Duration(seconds: 2));
     if (!mounted) return;
     setState(() => _isScanningDevices = false);
-    _completeVendingMachineConnection();
+    _connectMachine(demoConnectedMachine);
   }
 
-  void _completeVendingMachineConnection() {
+  void _openQrScanner() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => QrCameraPage(
+          onBack: () => Navigator.of(routeContext).pop(),
+          onConnected: () {
+            Navigator.of(routeContext).pop();
+            _connectMachine(demoConnectedMachine);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _connectMachine(VendingMachine machine) {
     setState(() {
-      _isVendingMachineConnected = true;
+      _connectedMachine = machine;
       selectedIndex = 0;
     });
   }
 
+  /// 연결된 자판기의 재고를 조회한 뒤 그 재고로 스토어를 연다.
+  Future<void> _openStore() async {
+    final machine = _connectedMachine;
+    if (machine == null || _isLoadingStore) return;
+    setState(() => _isLoadingStore = true);
+    try {
+      final items = await fetchMachineStock(machine.id);
+      if (!mounted) return;
+      setState(() => _isLoadingStore = false);
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => StorePage(machineName: machine.name, items: items),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingStore = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('자판기 재고를 불러오지 못했어요. 다시 시도해주세요.')),
+      );
+    }
+  }
+
+  void _pushSubPage(WidgetBuilder builder) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: builder));
+
+  /// 마이페이지에서 들어간 화면의 하단 메뉴: 쌓인 화면을 닫고 해당 탭으로 이동한다.
+  Widget _subPageNavigation(Route<dynamic>? shellRoute) => AppBottomNavigation(
+    selectedIndex: 4,
+    onSelected: (index) => _returnToTab(shellRoute, index),
+  );
+
+  void _returnToTab(Route<dynamic>? shellRoute, int index) {
+    Navigator.of(context).popUntil((route) => route == shellRoute);
+    selectTab(index);
+  }
+
+  void _openConsultHistory() {
+    final shellRoute = ModalRoute.of(context);
+    _pushSubPage(
+      (_) => ConsultHistoryScreen(
+        bottomNavigationBar: _subPageNavigation(shellRoute),
+        onOpenDetail: (record) => _pushSubPage(
+          (_) => Scaffold(
+            bottomNavigationBar: _subPageNavigation(shellRoute),
+            body: ConsultationScreen(
+              record: record,
+              onScanQr: _openQrScanner,
+              onOpenChatbot: () => _returnToTab(shellRoute, 3),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openPermitList() {
+    final shellRoute = ModalRoute.of(context);
+    _pushSubPage(
+      (_) =>
+          PermitListScreen(bottomNavigationBar: _subPageNavigation(shellRoute)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final machine = _connectedMachine;
     final pages = [
-      _isVendingMachineConnected
+      machine != null
           ? MainHomeConnectedScreen(
-              onScanQr: () => selectTab(2),
-              onOpenStore: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const StorePage()),
-              ),
+              machineName: machine.name,
+              onScanQr: _openQrScanner,
+              onOpenStore: _openStore,
+              isLoadingStore: _isLoadingStore,
             )
           : MainHomeDisconnectedScreen(
-              onScanQr: () => selectTab(2),
+              onScanQr: _openQrScanner,
               onRescanDevice: _rescanDevices,
               isScanning: _isScanningDevices,
             ),
       MapScreen(
-        onOpenStore: () => Navigator.of(context)
-            .push(MaterialPageRoute<void>(builder: (_) => const StorePage())),
+        selectedMachineId: machine?.id,
+        onSelectMachine: _connectMachine,
+        onUnselectMachine: () => setState(() => _connectedMachine = null),
       ),
-      QrCameraPage(
-        onBack: () => selectTab(0),
-        onConnected: _completeVendingMachineConnection,
+      // 상담 요청은 탭에 들어올 때마다 새로 시작되도록 선택됐을 때만 만든다.
+      if (selectedIndex == 2)
+        ConsultationScreen(
+          key: ValueKey(_consultSession),
+          direct: !_consultFromChatbot,
+          onScanQr: _openQrScanner,
+          onOpenChatbot: () => selectTab(3),
+        )
+      else
+        const SizedBox.shrink(),
+      ChatPage(
+        onScanQr: _openQrScanner,
+        onRequestConsult: () => _openConsultation(fromChatbot: true),
       ),
-      const ChatPage(),
       Mypage(
-        onOpenPermit: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute<void>(builder: (_) => const PermitListPage())),
-        onOpenInventory: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => InventoryRequestPage(
-              onTabSelected: (index) {
-                Navigator.of(context).pop();
-                selectTab(index);
-              },
-            ),
+        onOpenConsultHistory: _openConsultHistory,
+        onOpenPermit: _openPermitList,
+        onOpenInventory: () => _pushSubPage(
+          (_) => InventoryRequestPage(
+            onTabSelected: (index) {
+              Navigator.of(context).pop();
+              selectTab(index);
+            },
           ),
         ),
       ),
     ];
     return Scaffold(
       body: IndexedStack(index: selectedIndex, children: pages),
-      bottomNavigationBar: selectedIndex == 2
-          ? null
-          : AppBottomNavigation(
-              selectedIndex: selectedIndex,
-              onSelected: selectTab,
-            ),
+      bottomNavigationBar: AppBottomNavigation(
+        selectedIndex: selectedIndex,
+        onSelected: selectTab,
+      ),
     );
   }
 }
@@ -824,10 +550,8 @@ class _StethoscopeMark extends StatelessWidget {
   const _StethoscopeMark();
 
   @override
-  Widget build(BuildContext context) => const CustomPaint(
-    size: Size(30, 30),
-    painter: _StethoscopePainter(ink),
-  );
+  Widget build(BuildContext context) =>
+      const CustomPaint(size: Size(30, 30), painter: _StethoscopePainter(ink));
 }
 
 class _StethoscopePainter extends CustomPainter {
@@ -863,246 +587,15 @@ class _StethoscopePainter extends CustomPainter {
       oldDelegate.color != color;
 }
 
-class HomePage extends StatelessWidget {
-  const HomePage({required this.onOpenStore, super.key});
-
-  final VoidCallback onOpenStore;
-
-  @override
-  Widget build(BuildContext context) => AppPage(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'MOYAK',
-          style: TextStyle(
-            color: ink,
-            fontSize: 26,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 28),
-        const InfoBanner(),
-        const SizedBox(height: 20),
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 16,
-                  offset: Offset(0, 7),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE4FFF0),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    '●  3호관 2층 자판기 연결됨',
-                    style: TextStyle(
-                      color: Color(0xFF16B967),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 65),
-                const Icon(
-                  Icons.medical_services_outlined,
-                  size: 92,
-                  color: brandYellow,
-                ),
-                const SizedBox(height: 32),
-                const Text(
-                  '안전하게 연결되었습니다!',
-                  style: TextStyle(
-                    color: ink,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  '원하는 상비약품을 자판기 스토어에서 직접 조회하고\n편리하게 바로 구매해보세요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: mutedInk, height: 1.4),
-                ),
-                const Spacer(),
-                const Divider(color: Color(0xFFEDE7E4)),
-                const SizedBox(height: 18),
-                PrimaryButton(label: '상품 구매하기', onPressed: onOpenStore),
-              ],
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class InfoBanner extends StatelessWidget {
-  const InfoBanner({super.key});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: const Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '급한 의약품이 있다면? 자판기에서 바로!',
-                style: TextStyle(color: ink, fontWeight: FontWeight.w700),
-              ),
-              SizedBox(height: 5),
-              Text(
-                '약품 정보부터 비대면 의약품 화상 상담까지 스마트하게',
-                style: TextStyle(color: mutedInk, fontSize: 11),
-              ),
-            ],
-          ),
-        ),
-        Text('1/4', style: TextStyle(color: mutedInk, fontSize: 11)),
-      ],
-    ),
-  );
-}
-
-class MapPage extends StatelessWidget {
-  const MapPage({super.key});
-
-  @override
-  Widget build(BuildContext context) => AppPage(
-    padding: EdgeInsets.zero,
-    child: Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
-          child: TextField(
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search),
-              hintText: '가까운 모약 자판기 검색',
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-        ),
-        Expanded(
-          child: Stack(
-            children: [
-              Container(
-                color: const Color(0xFFE8E6DD),
-                child: CustomPaint(
-                  painter: MapPatternPainter(),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-              const Center(
-                child: Icon(
-                  Icons.location_on,
-                  size: 52,
-                  color: Colors.lightBlue,
-                ),
-              ),
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(26),
-                    ),
-                  ),
-                  child: const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '3호관 2층 자판기',
-                        style: TextStyle(
-                          color: ink,
-                          fontSize: 19,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        '인하대학교 3호관 IT융합공학과 2층 로비 엘리베이터 앞',
-                        style: TextStyle(color: mutedInk, fontSize: 12),
-                      ),
-                      Divider(height: 28),
-                      Text(
-                        '실시간 재고',
-                        style: TextStyle(color: mutedInk, fontSize: 12),
-                      ),
-                      Text(
-                        '여유 있음 (80%)',
-                        style: TextStyle(
-                          color: Color(0xFF00B957),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class MapPatternPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(.75)
-      ..strokeWidth = 3;
-    for (var x = -size.height; x < size.width + size.height; x += 70) {
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x + size.height, size.height),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
 class Mypage extends StatelessWidget {
   const Mypage({
+    required this.onOpenConsultHistory,
     required this.onOpenPermit,
     required this.onOpenInventory,
     super.key,
   });
 
+  final VoidCallback onOpenConsultHistory;
   final VoidCallback onOpenPermit;
   final VoidCallback onOpenInventory;
 
@@ -1213,17 +706,13 @@ class Mypage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        ...[
-          '공지사항 및 서비스 안내',
-          '고객 지원',
-          '앱 설정',
-          '계정 보안',
-          '로그아웃',
-        ].map(
-          (label) => _MypageMenuItem(
-            label: label,
-            destructive: label == '로그아웃',
-          ),
+        _MypageMenuItem(
+          label: '내 상담 내역 (처방·상담 요약)',
+          onTap: onOpenConsultHistory,
+        ),
+        ...['공지사항 및 서비스 안내', '고객 지원', '앱 설정', '계정 보안', '로그아웃'].map(
+          (label) =>
+              _MypageMenuItem(label: label, destructive: label == '로그아웃'),
         ),
       ],
     ),
@@ -1252,16 +741,21 @@ class _VerifiedBadge extends StatelessWidget {
 }
 
 class _MypageMenuItem extends StatelessWidget {
-  const _MypageMenuItem({required this.label, this.destructive = false});
+  const _MypageMenuItem({
+    required this.label,
+    this.destructive = false,
+    this.onTap,
+  });
 
   final String label;
   final bool destructive;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => SizedBox(
     height: 31,
     child: InkWell(
-      onTap: () {},
+      onTap: onTap ?? () {},
       child: DecoratedBox(
         decoration: const BoxDecoration(
           border: Border(bottom: BorderSide(color: Color(0xFFEDE7E4))),
@@ -1366,811 +860,6 @@ class AppPage extends StatelessWidget {
   );
 }
 
-class QrPage extends StatefulWidget {
-  const QrPage({required this.active, super.key});
-
-  final bool active;
-
-  @override
-  State<QrPage> createState() => _QrPageState();
-}
-
-class _QrPageState extends State<QrPage> {
-  bool _promptShown = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.active) _scheduleBiometricPrompt();
-  }
-
-  @override
-  void didUpdateWidget(covariant QrPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.active && !oldWidget.active) _scheduleBiometricPrompt();
-  }
-
-  void _scheduleBiometricPrompt() {
-    if (_promptShown) return;
-    _promptShown = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      showDialog<void>(
-        context: context,
-        useRootNavigator: true,
-        barrierDismissible: false,
-        barrierColor: const Color(0xB83E2723),
-        builder: (dialogContext) => _BiometricPrompt(
-          onCancel: () => Navigator.of(dialogContext).pop(),
-        ),
-      );
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: const SystemUiOverlayStyle(
-      statusBarColor: Color(0xFF3E2723),
-      statusBarIconBrightness: Brightness.light,
-      statusBarBrightness: Brightness.dark,
-      systemNavigationBarColor: Color(0xFFF5F5F3),
-      systemNavigationBarIconBrightness: Brightness.dark,
-    ),
-    child: Container(
-      color: const Color(0xFF3E2723),
-      child: SafeArea(
-        child: Column(
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(
-                    Icons.chevron_left,
-                    color: Color(0xFF8B7770),
-                    size: 26,
-                  ),
-                ),
-                const Expanded(
-                  child: Text(
-                    'QR 코드 스캔',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Color(0xFF9A8780),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 48),
-              ],
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'QR 코드를 가이드 영역 안에 대주세요',
-              style: TextStyle(
-                color: Color(0xFFBCAAA4),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '본인인증 후 의약품 수령이 승인됩니다.',
-              style: TextStyle(color: Color(0xFF8D7F79), fontSize: 10),
-            ),
-            const Expanded(child: SizedBox()),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _BiometricPrompt extends StatelessWidget {
-  const _BiometricPrompt({required this.onCancel});
-
-  final VoidCallback onCancel;
-
-  @override
-  Widget build(BuildContext context) => Dialog(
-    backgroundColor: Colors.white,
-    insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 320),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFFBE5),
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.fingerprint,
-                color: Color(0xFFFFD54F),
-                size: 26,
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              '생체 인증이 필요합니다',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF3E2723),
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 5),
-            const Text(
-              '기기에 등록된 지문을 인식해주세요',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF8D7F79),
-                fontSize: 11,
-              ),
-            ),
-            const SizedBox(height: 14),
-            const Divider(height: 1, color: Color(0xFFF0ECE9)),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 40,
-              width: double.infinity,
-              child: TextButton(
-                onPressed: onCancel,
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF8D7F79),
-                  backgroundColor: const Color(0xFFF4F4F3),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                child: const Text('취소'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class ChatPage extends StatefulWidget {
-  const ChatPage({this.client, super.key});
-
-  final http.Client? client;
-
-  @override
-  State<ChatPage> createState() => _ChatPageState();
-}
-
-class _ChatPageState extends State<ChatPage> {
-  late final http.Client _client = widget.client ?? http.Client();
-  final _messageController = TextEditingController();
-  final _scrollController = ScrollController();
-  final _messages = <Map<String, dynamic>>[];
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    if (widget.client == null) _client.close();
-    _messageController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _scrollToBottom() => WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (mounted && _scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    }
-  });
-
-  Future<void> _sendMessage([String? suggestedMessage]) async {
-    final question = (suggestedMessage ?? _messageController.text).trim();
-    if (question.isEmpty || _busy) return;
-    final history = _messages.where((m) => m['complete'] == true).toList();
-    final recent = history
-        .skip(history.length > 20 ? history.length - 20 : 0)
-        .map((m) => {'role': m['role'], 'content': m['content']})
-        .toList();
-    final message = <String, dynamic>{'role': 'user', 'content': question};
-    setState(() {
-      _busy = true;
-      _error = null;
-      _messages.add(message);
-      _messageController.clear();
-    });
-    _scrollToBottom();
-    try {
-      const base = String.fromEnvironment('API_BASE_URL');
-      final uri = (base.isEmpty ? Uri.base : Uri.parse(base)).resolve('/chat');
-      final response = await _client
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'question': question, 'history': recent}),
-          )
-          .timeout(const Duration(seconds: 90));
-      dynamic data;
-      try {
-        data = jsonDecode(utf8.decode(response.bodyBytes));
-      } catch (_) {
-        throw Exception('서버 응답을 읽지 못했습니다 (${response.statusCode}).');
-      }
-      if (response.statusCode != 200) {
-        throw Exception(
-          data is Map && data['detail'] is String
-              ? data['detail']
-              : '요청에 실패했습니다 (${response.statusCode}).',
-        );
-      }
-      if (data['answer'] is! String) throw Exception('답변 형식이 올바르지 않습니다.');
-      if (!mounted) return;
-      setState(() {
-        message['complete'] = true;
-        _messages.add({
-          'role': 'assistant',
-          'content': data['answer'],
-          'sources': data['sources'],
-          'evidence': data['evidence'],
-          'complete': true,
-        });
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _messages.remove(message);
-          _error = '$e'.replaceFirst('Exception: ', '');
-          _messageController.text = question;
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-        _scrollToBottom();
-      }
-    }
-  }
-
-  void _openVideoConsultation() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const VideoConsultationPage()),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: const SystemUiOverlayStyle(
-      statusBarColor: Color(0xFFF5F5F5),
-      statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness: Brightness.light,
-    ),
-    child: AppPage(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 32),
-                icon: const Icon(Icons.chevron_left, size: 24, color: ink),
-              ),
-              const CircleAvatar(
-                radius: 15,
-                backgroundColor: Color(0xFFFFF5CF),
-                child: Icon(
-                  Icons.medical_services_outlined,
-                  color: brandYellow,
-                  size: 17,
-                ),
-              ),
-              const SizedBox(width: 7),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '모약이',
-                      style: TextStyle(
-                        color: ink,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        height: 1.1,
-                      ),
-                    ),
-                    Text(
-                      '● 상담 가능',
-                      style: TextStyle(color: Color(0xFF18B55B), fontSize: 9),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                onPressed: _openVideoConsultation,
-                icon: const Icon(Icons.call_outlined, color: mutedInk, size: 18),
-              ),
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.search, color: mutedInk, size: 18),
-              ),
-            ],
-          ),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-          const Center(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Color(0xFFEFEDEC),
-                borderRadius: BorderRadius.all(Radius.circular(12)),
-              ),
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                child: Text(
-                  '오늘',
-                  style: TextStyle(color: mutedInk, fontSize: 9),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Expanded(
-            child: ListView(
-              controller: _scrollController,
-              padding: EdgeInsets.zero,
-              children: [
-                const _BotMessage(
-                  text: '안녕하세요! 자판기 건강 헬퍼 모약이입니다. 궁금한 약품이나 증상을 입력해주세요.',
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.only(left: 31),
-                  child: Wrap(
-                    spacing: 6,
-                    children: [
-                      _ChatSuggestion(
-                        label: '약품 정보',
-                        onTap: () => _sendMessage('약품 정보를 알려주세요.'),
-                      ),
-                      _ChatSuggestion(
-                        label: '상담하기',
-                        onTap: _openVideoConsultation,
-                      ),
-                    ],
-                  ),
-                ),
-                for (final message in _messages) ...[
-                  const SizedBox(height: 14),
-                  if (message['role'] == 'user')
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 250),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 9,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFE39A),
-                          borderRadius: BorderRadius.circular(13),
-                        ),
-                        child: Text(
-                          message['content'] as String,
-                          style: const TextStyle(
-                            color: ink,
-                            fontSize: 10,
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    _BotMessage(
-                      text: message['content'] as String,
-                      evidence: message['evidence'] is List
-                          ? message['evidence'] as List
-                          : const [],
-                      sources: message['sources'] is List
-                          ? message['sources'] as List
-                          : const [],
-                    ),
-                ],
-                if (_busy) ...[
-                  const SizedBox(height: 14),
-                  const Padding(
-                    padding: EdgeInsets.only(left: 31),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            color: brandYellow,
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          '약품 정보를 확인하고 있어요…',
-                          style: TextStyle(color: mutedInk, fontSize: 9),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Text(
-                _error!,
-                key: const Key('chat-error'),
-                style: const TextStyle(color: Color(0xFFD84B2F), fontSize: 10),
-              ),
-            ),
-          Row(
-            children: [
-              IconButton(
-                onPressed: () {},
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: mutedInk,
-                  fixedSize: const Size(32, 32),
-                ),
-                icon: const Icon(Icons.add, size: 17),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: SizedBox(
-                  height: 34,
-                  child: TextField(
-                    controller: _messageController,
-                    maxLength: 4000,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _sendMessage(),
-                    style: const TextStyle(color: ink, fontSize: 10),
-                    decoration: InputDecoration(
-                      counterText: '',
-                      hintText: '메시지를 입력하세요...',
-                      hintStyle: const TextStyle(
-                        color: mutedInk,
-                        fontSize: 10,
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 7),
-              IconButton.filled(
-                key: const Key('chat-send'),
-                tooltip: '메시지 전송',
-                onPressed: _busy ? null : _sendMessage,
-                style: IconButton.styleFrom(
-                  backgroundColor: brandYellow,
-                  foregroundColor: ink,
-                  fixedSize: const Size(32, 32),
-                ),
-                icon: const Icon(Icons.arrow_upward, size: 16),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _BotMessage extends StatelessWidget {
-  const _BotMessage({
-    required this.text,
-    this.evidence = const [],
-    this.sources = const [],
-  });
-
-  final String text;
-  final List<dynamic> evidence;
-  final List<dynamic> sources;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const CircleAvatar(
-        radius: 12,
-        backgroundColor: Color(0xFFFFF0B4),
-        child: Icon(
-          Icons.medical_services_outlined,
-          color: brandYellow,
-          size: 14,
-        ),
-      ),
-      const SizedBox(width: 8),
-      Flexible(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 250),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(13),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SelectableText(
-                text,
-                style: const TextStyle(color: ink, fontSize: 10, height: 1.35),
-              ),
-              if (evidence.isNotEmpty)
-                Theme(
-                  data: Theme.of(
-                    context,
-                  ).copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: EdgeInsets.zero,
-                    dense: true,
-                    visualDensity: VisualDensity.compact,
-                    iconColor: brandYellow,
-                    collapsedIconColor: mutedInk,
-                    title: const Text(
-                      '답변 근거 보기',
-                      style: TextStyle(
-                        color: brandYellow,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    children: [
-                      for (final e in evidence)
-                        Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: 6),
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFFCF3),
-                            border: Border.all(color: const Color(0xFFF2EBDD)),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${e['item_name']} · ${e['field_label']}',
-                                style: const TextStyle(
-                                  color: ink,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                '${e['text']}',
-                                style: const TextStyle(
-                                  color: mutedInk,
-                                  fontSize: 8,
-                                  height: 1.35,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              if (sources.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '참고: ${sources.join(', ')}',
-                  style: const TextStyle(color: mutedInk, fontSize: 8),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-class _ChatSuggestion extends StatelessWidget {
-  const _ChatSuggestion({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 24,
-    child: OutlinedButton(
-      onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: brandYellow,
-        side: const BorderSide(color: brandYellow, width: 0.8),
-        padding: const EdgeInsets.symmetric(horizontal: 9),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
-      ),
-      child: Text(label),
-    ),
-  );
-}
-
-class PermitListPage extends StatelessWidget {
-  const PermitListPage({super.key});
-  @override
-  Widget build(BuildContext context) => SimpleSubPage(
-    title: '전자 구매 허가서',
-    child: Column(
-      children: const [
-        PermitCard(
-          title: '타이레놀정 500mg',
-          status: '사용 가능',
-          active: true,
-          quantity: '10정 / 1갑',
-          period: '2025.01.15 ~ 2025.07.15',
-          pharmacy: '김약사 (늘푸른약국)',
-        ),
-        PermitCard(
-          title: '탁센 연질캡슐',
-          status: '기간 만료',
-          quantity: '10캡슐 / 1갑',
-          period: '2024.08.01 ~ 2025.02.01',
-          pharmacy: '박진형 약사 (온누리약국)',
-        ),
-        PermitCard(
-          title: '베아제정 소화제',
-          status: '기간 만료',
-          quantity: '10정 / 1갑',
-          period: '2024.06.10 ~ 2024.12.10',
-          pharmacy: '이수진 약사 (메디컬약국)',
-        ),
-      ],
-    ),
-  );
-}
-
-class PermitCard extends StatelessWidget {
-  const PermitCard({
-    required this.title,
-    required this.status,
-    required this.quantity,
-    required this.period,
-    required this.pharmacy,
-    this.active = false,
-    super.key,
-  });
-  final String title, status, quantity, period, pharmacy;
-  final bool active;
-  @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: 10),
-    padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: active ? const Color(0xFFFFD866) : const Color(0xFFF0ECE9),
-        width: active ? 1.2 : 0.8,
-      ),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x10000000),
-          blurRadius: 6,
-          offset: Offset(0, 2),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.assignment_outlined,
-              color: active ? brandYellow : mutedInk,
-              size: 12,
-            ),
-            const SizedBox(width: 5),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: ink,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  height: 1.1,
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: active
-                    ? const Color(0xFFE8F8ED)
-                    : const Color(0xFFF0EFED),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                status,
-                style: TextStyle(
-                  color: active ? const Color(0xFF1CAA62) : mutedInk,
-                  fontSize: 7,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const Divider(height: 14, thickness: 0.6),
-        DetailLine(label: '수량', value: quantity),
-        DetailLine(label: '유효기간', value: period),
-        DetailLine(label: '발급 약사', value: pharmacy),
-      ],
-    ),
-  );
-}
-
-class DetailLine extends StatelessWidget {
-  const DetailLine({required this.label, required this.value, super.key});
-  final String label, value;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 2),
-    child: Row(
-      children: [
-        SizedBox(
-          width: 44,
-          child: Text(
-            label,
-            style: const TextStyle(color: mutedInk, fontSize: 8, height: 1.1),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: ink, fontSize: 8, height: 1.1),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
 class InventoryRequestPage extends StatefulWidget {
   const InventoryRequestPage({required this.onTabSelected, super.key});
 
@@ -2207,9 +896,8 @@ class _InventoryRequestPageState extends State<InventoryRequestPage> {
 
   Future<void> _submitRequest() async {
     if (_selectedMedicines.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('신청할 약품을 선택해주세요.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('신청할 약품을 선택해주세요.')));
       return;
     }
 
@@ -2281,7 +969,11 @@ class _InventoryRequestPageState extends State<InventoryRequestPage> {
                           value: '3호관 2층 자판기',
                           child: Row(
                             children: [
-                              Icon(Icons.grid_view, color: brandYellow, size: 16),
+                              Icon(
+                                Icons.grid_view,
+                                color: brandYellow,
+                                size: 16,
+                              ),
                               SizedBox(width: 8),
                               Text(
                                 '3호관 2층 자판기',
@@ -2326,15 +1018,11 @@ class _InventoryRequestPageState extends State<InventoryRequestPage> {
                       fillColor: Colors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFECE7E3),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFFECE7E3)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFECE7E3),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFFECE7E3)),
                       ),
                     ),
                   ),
@@ -2370,10 +1058,7 @@ class _InventoryRequestPageState extends State<InventoryRequestPage> {
             child: SizedBox(
               width: double.infinity,
               height: 46,
-              child: PrimaryButton(
-                label: '신청하기',
-                onPressed: _submitRequest,
-              ),
+              child: PrimaryButton(label: '신청하기', onPressed: _submitRequest),
             ),
           ),
           AppBottomNavigation(
@@ -2542,67 +1227,12 @@ class _InventoryMedicineTile extends StatelessWidget {
   );
 }
 
-class SimpleSubPage extends StatelessWidget {
-  const SimpleSubPage({
-    required this.title,
-    required this.child,
-    this.bottom,
-    super.key,
-  });
-  final String title;
-  final Widget child;
-  final Widget? bottom;
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Column(
-        children: [
-          const AppStatusBar(),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.chevron_left, size: 30),
-                      ),
-                      Expanded(
-                        child: Text(
-                          title,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: ink,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 48),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Expanded(child: SingleChildScrollView(child: child)),
-                  if (bottom != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 18),
-                      child: bottom!,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
 class StorePage extends StatefulWidget {
-  const StorePage({super.key});
+  const StorePage({required this.machineName, required this.items, super.key});
+
+  /// 재고를 조회한 자판기 이름과 그 재고 목록.
+  final String machineName;
+  final List<StockItem> items;
 
   @override
   State<StorePage> createState() => _StorePageState();
@@ -2614,24 +1244,7 @@ class _StorePageState extends State<StorePage> {
   int _selectedCategory = 0;
   bool _searchOpen = false;
 
-  static const _products = [
-    _StoreProduct('타이레놀 ER 정', '일반 상비', '3,000원', _ProductKind.tylenol),
-    _StoreProduct(
-      '판콜 에이 내복액',
-      '의약품 🔒',
-      '2,600원',
-      _ProductKind.cough,
-      locked: true,
-    ),
-    _StoreProduct(
-      '훼스탈 플러스 정',
-      '소화제',
-      '3,500원',
-      _ProductKind.digestive,
-      soldOut: true,
-    ),
-    _StoreProduct('생리식염수 세척용', '일반 위생', '1,500원', _ProductKind.saline),
-  ];
+  late final _products = widget.items.map(_StoreProduct.fromStock).toList();
 
   @override
   void dispose() {
@@ -2643,9 +1256,7 @@ class _StorePageState extends State<StorePage> {
     Iterable<_StoreProduct> products = _products;
     if (_selectedTab == 1) {
       products = products.where(
-        (product) => _selectedCategory == 0
-            ? product.category != '의약품 🔒'
-            : product.category == '의약품 🔒',
+        (product) => _selectedCategory == 0 ? !product.locked : product.locked,
       );
     }
     final query = _searchController.text.trim();
@@ -2671,6 +1282,7 @@ class _StorePageState extends State<StorePage> {
           children: [
             const AppStatusBar(backgroundColor: Colors.white),
             _StoreHeader(
+              title: widget.machineName,
               searchOpen: _searchOpen,
               searchController: _searchController,
               onBack: () => Navigator.of(context).pop(),
@@ -2713,6 +1325,7 @@ class _StorePageState extends State<StorePage> {
 
 class _StoreHeader extends StatelessWidget {
   const _StoreHeader({
+    required this.title,
     required this.searchOpen,
     required this.searchController,
     required this.onBack,
@@ -2720,6 +1333,7 @@ class _StoreHeader extends StatelessWidget {
     required this.onSearchChanged,
   });
 
+  final String title;
   final bool searchOpen;
   final TextEditingController searchController;
   final VoidCallback onBack;
@@ -2755,10 +1369,12 @@ class _StoreHeader extends StatelessWidget {
                     contentPadding: EdgeInsets.zero,
                   ),
                 )
-              : const Text(
-                  '3호관 2층 자판기',
+              : Text(
+                  title,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     color: ink,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -2924,7 +1540,7 @@ class _CategoryChip extends StatelessWidget {
   );
 }
 
-enum _ProductKind { tylenol, cough, digestive, saline }
+enum _ProductKind { tylenol, cough, digestive, saline, generic }
 
 class _StoreProduct {
   const _StoreProduct(
@@ -2935,6 +1551,31 @@ class _StoreProduct {
     this.locked = false,
     this.soldOut = false,
   });
+
+  /// 자판기 재고 한 건을 스토어 카드로 바꾼다. 의약품 분류는 약사 허가가 필요해 잠금 표시한다.
+  factory _StoreProduct.fromStock(StockItem item) {
+    final category = item.category ?? '일반 상비';
+    final locked = category == '의약품';
+    final price = item.price;
+    return _StoreProduct(
+      item.name,
+      locked ? '의약품 🔒' : category,
+      price == null ? '가격 정보 없음' : formatPrice(price),
+      _kindFor(item.name),
+      locked: locked,
+      soldOut: item.stock <= 0,
+    );
+  }
+
+  static _ProductKind _kindFor(String name) {
+    if (name.contains('타이레놀')) return _ProductKind.tylenol;
+    if (name.contains('판콜') || name.contains('기침')) return _ProductKind.cough;
+    if (name.contains('훼스탈') || name.contains('베아제') || name.contains('소화')) {
+      return _ProductKind.digestive;
+    }
+    if (name.contains('식염수')) return _ProductKind.saline;
+    return _ProductKind.generic;
+  }
 
   final String name;
   final String category;
@@ -3063,6 +1704,11 @@ class _ProductArtwork extends StatelessWidget {
       _ProductKind.cough => const _CoughMedicinePack(),
       _ProductKind.digestive => const _DigestivePack(),
       _ProductKind.saline => const _SalineBottle(),
+      _ProductKind.generic => const Icon(
+        Icons.medication_outlined,
+        color: Color(0xFFBCAAA4),
+        size: 48,
+      ),
     },
   );
 }
@@ -3256,127 +1902,4 @@ class _SalineBottle extends StatelessWidget {
       ),
     ],
   );
-}
-
-class AuthField extends StatelessWidget {
-  const AuthField({
-    required this.hint,
-    this.keyboardType,
-    this.obscureText = false,
-    super.key,
-  });
-
-  final String hint;
-  final TextInputType? keyboardType;
-  final bool obscureText;
-
-  @override
-  Widget build(BuildContext context) => TextField(
-    keyboardType: keyboardType,
-    obscureText: obscureText,
-    decoration: InputDecoration(hintText: hint),
-  );
-}
-
-class AuthScaffold extends StatelessWidget {
-  const AuthScaffold({
-    required this.title,
-    required this.subtitle,
-    required this.fields,
-    required this.actionLabel,
-    required this.bottomLabel,
-    required this.bottomActionLabel,
-    required this.onBottomAction,
-    super.key,
-  });
-
-  final String title;
-  final String subtitle;
-  final List<Widget> fields;
-  final String actionLabel;
-  final String bottomLabel;
-  final String bottomActionLabel;
-  final VoidCallback onBottomAction;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 44, 28, 28),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 430),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const BrandMark(size: 32),
-                  const SizedBox(height: 48),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: ink,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    subtitle,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: mutedInk, fontSize: 14),
-                  ),
-                  const SizedBox(height: 34),
-                  ...fields.expand(
-                    (field) => [field, const SizedBox(height: 12)],
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 56,
-                    child: FilledButton(
-                      onPressed: () {},
-                      style: FilledButton.styleFrom(
-                        backgroundColor: brandYellow,
-                        foregroundColor: ink,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      child: Text(actionLabel),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        bottomLabel,
-                        style: const TextStyle(color: mutedInk, fontSize: 13),
-                      ),
-                      TextButton(
-                        onPressed: onBottomAction,
-                        style: TextButton.styleFrom(
-                          foregroundColor: ink,
-                          padding: const EdgeInsets.only(left: 5),
-                        ),
-                        child: Text(
-                          bottomActionLabel,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
