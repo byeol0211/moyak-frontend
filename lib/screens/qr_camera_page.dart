@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../widgets/app_status_bar.dart';
+
 const _scanLineColor = Color(0xFFFFD54F);
 const _qrModuleColor = Color(0xFFD9E4E8);
 
@@ -44,6 +46,7 @@ class _QrCameraPageState extends State<QrCameraPage> {
       body: SafeArea(
         child: Column(
           children: [
+            const AppStatusBar(color: Colors.white),
             SizedBox(
               height: 48,
               child: Row(

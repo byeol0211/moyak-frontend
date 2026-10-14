@@ -11,6 +11,7 @@ import 'screens/permission_screen.dart';
 import 'screens/qr_camera_page.dart';
 import 'screens/screen_flows.dart';
 import 'screens/video_consultation_page.dart';
+import 'widgets/app_status_bar.dart';
 
 const pageBackground = Color(0xFFFFFBE8);
 const splashBackground = Color(0xFFFFFDE7);
@@ -100,21 +101,28 @@ class _SplashPageState extends State<SplashPage> {
     child: Scaffold(
       backgroundColor: splashBackground,
       body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 411),
-              child: AspectRatio(
-                aspectRatio: 411 / 292,
-                child: Image.asset(
-                  'assets/figma/splash_welcome.png',
-                  fit: BoxFit.cover,
-                  semanticLabel: '모약이에 온 걸 환영해! 약 자판기 마스코트',
+        child: Column(
+          children: [
+            const AppStatusBar(),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 411),
+                    child: AspectRatio(
+                      aspectRatio: 411 / 292,
+                      child: Image.asset(
+                        'assets/figma/splash_welcome.png',
+                        fit: BoxFit.cover,
+                        semanticLabel: '모약이에 온 걸 환영해! 약 자판기 마스코트',
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     ),
@@ -562,8 +570,19 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int selectedIndex = 0;
   bool _isVendingMachineConnected = false;
+  bool _isScanningDevices = false;
 
   void selectTab(int index) => setState(() => selectedIndex = index);
+
+  // 기기 탐색 API가 아직 없어 주변 자판기를 찾은 것처럼 잠시 기다린 뒤 연결한다.
+  Future<void> _rescanDevices() async {
+    if (_isScanningDevices) return;
+    setState(() => _isScanningDevices = true);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+    setState(() => _isScanningDevices = false);
+    _completeVendingMachineConnection();
+  }
 
   void _completeVendingMachineConnection() {
     setState(() {
@@ -584,7 +603,8 @@ class _AppShellState extends State<AppShell> {
             )
           : MainHomeDisconnectedScreen(
               onScanQr: () => selectTab(2),
-              onRescanDevice: () => selectTab(1),
+              onRescanDevice: _rescanDevices,
+              isScanning: _isScanningDevices,
             ),
       MapScreen(
         onOpenStore: () => Navigator.of(context)
@@ -1325,7 +1345,14 @@ class AppPage extends StatelessWidget {
   final EdgeInsets padding;
   @override
   Widget build(BuildContext context) => SafeArea(
-    child: Padding(padding: padding, child: child),
+    child: Column(
+      children: [
+        const AppStatusBar(),
+        Expanded(
+          child: Padding(padding: padding, child: child),
+        ),
+      ],
+    ),
   );
 }
 
@@ -2193,6 +2220,7 @@ class _InventoryRequestPageState extends State<InventoryRequestPage> {
     body: SafeArea(
       child: Column(
         children: [
+          const AppStatusBar(),
           SizedBox(
             height: 44,
             child: Row(
@@ -2517,40 +2545,47 @@ class SimpleSubPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.chevron_left, size: 30),
-                ),
-                Expanded(
-                  child: Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: ink,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
+      child: Column(
+        children: [
+          const AppStatusBar(),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.chevron_left, size: 30),
+                      ),
+                      Expanded(
+                        child: Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: ink,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 48),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 48),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Expanded(child: SingleChildScrollView(child: child)),
-            if (bottom != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 18),
-                child: bottom!,
+                  const SizedBox(height: 14),
+                  Expanded(child: SingleChildScrollView(child: child)),
+                  if (bottom != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 18),
+                      child: bottom!,
+                    ),
+                ],
               ),
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     ),
   );
@@ -2624,6 +2659,7 @@ class _StorePageState extends State<StorePage> {
       body: SafeArea(
         child: Column(
           children: [
+            const AppStatusBar(backgroundColor: Colors.white),
             _StoreHeader(
               searchOpen: _searchOpen,
               searchController: _searchController,

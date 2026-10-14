@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../widgets/app_status_bar.dart';
+
 const _mapCanvas = Color(0xFFF1EEE5);
 const _mapInk = Color(0xFF3E2723);
 const _mapMuted = Color(0xFF8D7F79);
@@ -119,133 +121,140 @@ class _MapScreenState extends State<MapScreen> {
       color: _mapCanvas,
       child: SafeArea(
         bottom: false,
-        child: Stack(
-          fit: StackFit.expand,
+        child: Column(
           children: [
-            FlutterMap(
-              mapController: _map,
-              options: MapOptions(
-                initialCenter: _selected == null
-                    ? _defaultCenter
-                    : _point(_selected!),
-                initialZoom: 16,
-                minZoom: 3,
-                maxZoom: 19,
-                onMapReady: () => _ready = true,
-              ),
-              children: [
-                TileLayer(
-                  tileDisplay: const TileDisplay.instantaneous(),
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.moyak.app',
-                  maxNativeZoom: 19,
-                  panBuffer: 0,
-                ),
-                MarkerLayer(
-                  markers: [
-                    for (final m in _filtered)
-                      m['id'] == _selected?['id']
-                          ? Marker(
-                              point: _point(m),
-                              width: 140,
-                              height: 96,
-                              alignment: Alignment.topCenter,
-                              child: _SelectedVendingMarker(
-                                label: m['name'] as String,
-                              ),
-                            )
-                          : Marker(
-                              point: _point(m),
-                              width: 80,
-                              height: 60,
-                              alignment: Alignment.topCenter,
-                              child: GestureDetector(
-                                onTap: () => _select(m),
-                                child: Tooltip(
-                                  message: m['name'] as String,
-                                  child: const _VendingMarker(),
-                                ),
-                              ),
-                            ),
-                  ],
-                ),
-                RichAttributionWidget(
-                  alignment: AttributionAlignment.bottomLeft,
-                  attributions: [
-                    TextSourceAttribution(
-                      'OpenStreetMap contributors',
-                      onTap: () => launchUrl(
-                        Uri.parse('https://www.openstreetmap.org/copyright'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            Positioned(
-              top: 16,
-              left: 16,
-              right: 16,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+            const AppStatusBar(),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  _SearchBar(
-                    controller: _search,
-                    loading: _loading,
-                    onRefresh: _load,
-                    onChanged: (_) => setState(() {
-                      if (!_filtered.any((m) => m['id'] == _selected?['id'])) {
-                        _selected = null;
-                      }
-                    }),
-                    onSubmitted: (_) {
-                      if (_filtered.isNotEmpty) _select(_filtered.first);
-                    },
-                  ),
-                  if (_loading) ...[
-                    const SizedBox(height: 8),
-                    const LinearProgressIndicator(
-                      color: _mapYellow,
-                      backgroundColor: Color(0xFFFFF6D8),
+                  FlutterMap(
+                    mapController: _map,
+                    options: MapOptions(
+                      initialCenter: _selected == null
+                          ? _defaultCenter
+                          : _point(_selected!),
+                      initialZoom: 16,
+                      minZoom: 3,
+                      maxZoom: 19,
+                      onMapReady: () => _ready = true,
                     ),
-                  ],
-                  if (_error != null) ...[
-                    const SizedBox(height: 8),
-                    _MapNotice(text: _error!, error: true),
-                  ] else if (!_loading) ...[
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
+                    children: [
+                      TileLayer(
+                        tileDisplay: const TileDisplay.instantaneous(),
+                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.moyak.app',
+                        maxNativeZoom: 19,
+                        panBuffer: 0,
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          for (final m in _filtered)
+                            m['id'] == _selected?['id']
+                                ? Marker(
+                                    point: _point(m),
+                                    width: 140,
+                                    height: 96,
+                                    alignment: Alignment.topCenter,
+                                    child: _SelectedVendingMarker(
+                                      label: m['name'] as String,
+                                    ),
+                                  )
+                                : Marker(
+                                    point: _point(m),
+                                    width: 80,
+                                    height: 60,
+                                    alignment: Alignment.topCenter,
+                                    child: GestureDetector(
+                                      onTap: () => _select(m),
+                                      child: Tooltip(
+                                        message: m['name'] as String,
+                                        child: const _VendingMarker(),
+                                      ),
+                                    ),
+                                  ),
+                        ],
+                      ),
+                      RichAttributionWidget(
+                        alignment: AttributionAlignment.bottomLeft,
+                        attributions: [
+                          TextSourceAttribution(
+                            'OpenStreetMap contributors',
+                            onTap: () => launchUrl(
+                              Uri.parse('https://www.openstreetmap.org/copyright'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  Positioned(
+                    top: 16,
+                    left: 16,
+                    right: 16,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _SearchBar(
+                          controller: _search,
+                          loading: _loading,
+                          onRefresh: _load,
+                          onChanged: (_) => setState(() {
+                            if (!_filtered.any((m) => m['id'] == _selected?['id'])) {
+                              _selected = null;
+                            }
+                          }),
+                          onSubmitted: (_) {
+                            if (_filtered.isNotEmpty) _select(_filtered.first);
+                          },
+                        ),
+                        if (_loading) ...[
+                          const SizedBox(height: 8),
+                          const LinearProgressIndicator(
+                            color: _mapYellow,
+                            backgroundColor: Color(0xFFFFF6D8),
+                          ),
+                        ],
+                        if (_error != null) ...[
+                          const SizedBox(height: 8),
+                          _MapNotice(text: _error!, error: true),
+                        ] else if (!_loading) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: _MapNotice(
+                              text:
+                                  '$_source ${_filtered.length}곳${_limited ? ' · 최대 500곳 표시' : ''}',
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (_selected != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: _StoreSheet(
+                        machine: _selected!,
+                        onOpenStore: widget.onOpenStore,
+                      ),
+                    )
+                  else if (!_loading && _error == null)
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
                       child: _MapNotice(
-                        text:
-                            '$_source ${_filtered.length}곳${_limited ? ' · 최대 500곳 표시' : ''}',
+                        text: _items.isEmpty
+                            ? '위치가 등록된 운영 자판기가 없습니다.'
+                            : '검색 결과를 선택하거나 다른 이름으로 검색해주세요.',
                       ),
                     ),
-                  ],
                 ],
               ),
             ),
-            if (_selected != null)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _StoreSheet(
-                  machine: _selected!,
-                  onOpenStore: widget.onOpenStore,
-                ),
-              )
-            else if (!_loading && _error == null)
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 16,
-                child: _MapNotice(
-                  text: _items.isEmpty
-                      ? '위치가 등록된 운영 자판기가 없습니다.'
-                      : '검색 결과를 선택하거나 다른 이름으로 검색해주세요.',
-                ),
-              ),
           ],
         ),
       ),
