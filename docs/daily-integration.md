@@ -53,11 +53,13 @@ VideoConsultationPage(
 
 서버 주소는 기존 `API_BASE_URL` 설정을 사용합니다.
 
-## 실제 통화 검증은 보류
+## 실제 통화 검증 (남은 작업)
 
-사용자 요청에 따라 Render/Daily 방에 접속하는 실제 통화 검증은 수행하지 않았습니다. 개발 모드의 화상 입장 화면에는 **개발용 Daily 테스트 방 연결** 버튼이 있습니다. 나중에 생성된 방 주소와 필요한 입장 토큰을 직접 입력할 수 있습니다. 이 화면은 방을 생성하지 않으며, 실제 상담 ID가 없으면 채팅/서버 상담 종료는 연결되지 않습니다.
+2026-10-17 기준 실제 Daily 방에 접속하는 통화 검증은 아직 하지 않았습니다. 상담 API가 연결돼 있어서, 앱을 **게스트로 계속하기**로 실행해 상담을 요청하면 Render가 만든 실제 방(`room_url`)과 상담 ID가 통화 화면에 전달됩니다.
 
-Render 준비 후 Android/iOS 기기와 기존 약사 웹을 이용해 다음을 확인합니다.
+개발 모드의 화상 입장 화면에는 **개발용 Daily 테스트 방 연결** 버튼도 있습니다. 이미 만들어진 방 주소와 필요한 입장 토큰을 직접 입력할 수 있습니다. 이 버튼은 방을 생성하지 않으며, 실제 상담 ID가 없으면 채팅/서버 상담 종료는 연결되지 않습니다.
+
+Android 기기(앱)와 약사 웹(https://moyak-backend.onrender.com/pharmacist)으로 다음을 확인합니다.
 
 1. 동일 상담의 `room_url`로 양쪽 입장, 영상·음성 송수신.
 2. 권한 거부, 카메라·마이크 설정, 렌즈 전환, 앱 백그라운드/복귀.
@@ -70,7 +72,8 @@ Render 준비 후 Android/iOS 기기와 기존 약사 웹을 이용해 다음을
 
 - Android: 최소 API 24, Daily 0.40.0이 사용하는 NDK `30.0.15729638`로 설정했습니다. 카메라·마이크·오디오 설정 권한을 선언했습니다.
 - iOS: 프로젝트의 기존 배포 대상 15.0을 유지합니다. CocoaPods 설정과 Daily 내부 permission_handler의 카메라·마이크 권한 매크로를 추가했습니다. Mac에서 `flutter pub get` 후 `cd ios && pod install`을 진행합니다.
-- 현재 작업 환경에는 Android SDK가 없어 APK 빌드를 확인하지 못했습니다. Windows 환경이므로 iOS 빌드 역시 별도 확인이 필요합니다.
+- Android: Windows에서 APK를 빌드해 갤럭시 S23(Android 16)에 설치·실행했습니다(2026-10-17). `daily_flutter`가 compileSdk 35로 고정돼 있어 `android/build.gradle.kts`에서 플러그인 compileSdk를 36으로 맞춥니다. 빌드 환경 설정은 [프론트엔드 구성](frontend.md#android-빌드-windows)을 참고하세요.
+- iOS: Windows 환경이라 빌드를 확인하지 못했습니다. Mac에서 별도 확인이 필요합니다.
 - 자동 테스트는 실제 Daily 연결 대신 가짜 통화 엔진과 HTTP 응답으로 제어·재시도·정리·메시지·종료 흐름을 확인합니다. 웹 빌드는 모바일 SDK 코드가 웹 번들에서 제외되는지 확인하는 용도이며 모바일 통화 검증을 대신하지 않습니다.
 
 참고: [Daily Flutter SDK](https://pub.dev/packages/daily_flutter), [CallClient API](https://pub.dev/documentation/daily_flutter/latest/daily_flutter/CallClient-class.html), [백엔드 Flutter 인수인계](https://github.com/JONGBOK1/moyak-backend/blob/master/docs/flutter-handoff.md).

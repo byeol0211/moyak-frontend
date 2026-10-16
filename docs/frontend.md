@@ -182,4 +182,3 @@ flutter build apk --release --split-per-abi --dart-define=API_BASE_URL=https://m
 - **화면 배치 다듬기:** 실제 기기(갤럭시 S23)에서 조정이 필요한 부분이 있습니다.
 - **카카오 지도 키:** 앱의 키와 서버(`/api/v1/map/config`)의 키가 서로 다릅니다. 하나로 통일하는 것이 좋습니다.
 - **지도 '길찾기' 링크:** 외부 링크를 열려면 `url_launcher` 패키지가 필요합니다.
-- **[map.md](map.md)** 는 예전 지도 화면 기준이라 일부 내용이 다릅니다.
