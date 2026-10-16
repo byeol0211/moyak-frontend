@@ -4,7 +4,7 @@ Daily 통화 SDK·상담 채팅 클라이언트 추가 이후의 연결 방법�
 
 기준: 2026-10-16. 키오스크와 백엔드는 이 저장소 작업 범위에 포함하지 않습니다.
 
-> 2026-10-17 업데이트: 자판기 재고·약사 상담·상담 내역·허가서를 실제 서버 API에 연결했습니다.
+> 2026-10-17 업데이트: 자판기 재고·약사 상담·상담 내역·허가서·QR 자판기 연결을 실제 서버 API에 연결했습니다.
 > 최신 연동 현황과 Android 빌드 방법은 [프론트엔드 구성](frontend.md)을 기준으로 봅니다.
 
 ## 화면 확인 방법
@@ -72,7 +72,7 @@ flutter run --dart-define=API_BASE_URL=https://moyak-backend.onrender.com
 | 상담 | ✅ 연결 (2026-10-17): `data/consultation_api.dart`, `ConsultationScreen`. 진행 중 상담 재사용, 3초 상태 확인, 약사 입장 알림, 취소 |
 | 화상·채팅 | ✅ 연결 (2026-10-17): 상담 응답의 room_url과 상담 ID를 `AppSession.attachCallRoom`으로 통화 화면에 전달. **실제 통화 검증 전** |
 | 상담 내역·허가서 | ✅ 연결 (2026-10-17): 두 화면의 `loadRecords`에 실제 조회 주입 |
-| QR | ❌ 남음: `QrCameraPage.onScan`에서 machineId/token과 사용자 ID를 `POST /vending/scan`으로 전달하고, 성공 후에만 연결 상태 갱신 |
+| QR | ✅ 연결 (2026-10-17, 기기 확인 완료): 인식한 machineId/token과 사용자 ID를 `POST /vending/scan`으로 전달하고, 성공 후에만 홈을 "연동됨"으로 갱신 |
 | 인증·가입 | ❌ 서버 API 없음: `login_page.dart`, `screen_flows.dart`. 현재 임시 ID는 인증 자격 증명이 아님 |
 
 홈의 "자판기 재고 보기(상품 구매하기)" 버튼은 기획 변경으로 제거했습니다(2026-10-17). 미리보기 모드의 상담 상태 선택·예시 허가서·예시 QR 연결은 화면 확인 기능입니다.
@@ -85,4 +85,4 @@ flutter test
 flutter build web --no-pub
 ```
 
-자동 테스트는 입력·QR 파싱·사용자 ID·대화/상담 상태·오류 재시도·작은 화면과 키보드 레이아웃을 검증합니다. Android/iOS 실제 기기의 카메라·마이크 권한, 앱 복귀, 위치 조회, QR 인식은 기기에서 별도 확인해야 합니다. 실제 상담 API 흐름은 `test/consultation_live_test.dart`에서 가짜 서버 응답으로 검증합니다. 실제 영상 통화와 약사 웹 연동, QR 서버 검증은 기기에서 통합 테스트가 필요합니다.
+자동 테스트는 입력·QR 파싱·사용자 ID·대화/상담 상태·오류 재시도·작은 화면과 키보드 레이아웃을 검증합니다. Android/iOS 실제 기기의 카메라·마이크 권한, 앱 복귀, 위치 조회, QR 인식은 기기에서 별도 확인해야 합니다. 실제 상담 API 흐름은 `test/consultation_live_test.dart`에서 가짜 서버 응답으로 검증합니다. QR 연결은 갤럭시 S23과 Render 키오스크로 확인했습니다. 실제 영상 통화와 약사 웹 연동은 기기에서 통합 테스트가 필요합니다.

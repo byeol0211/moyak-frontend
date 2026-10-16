@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../config/app_config.dart';
+import '../data/api_client.dart';
 import '../data/machine_qr.dart';
 
 class QrCameraPage extends StatefulWidget {
@@ -61,6 +62,7 @@ class _QrCameraPageState extends State<QrCameraPage>
       final qr = MachineQr.parse(raw);
       await _controller.stop();
       if (widget.onScan != null) {
+        if (mounted) setState(() => _message = '자판기와 연결하고 있어요...');
         await widget.onScan!(qr);
         if (mounted) widget.onConnected?.call();
       } else if (mounted) {
@@ -70,6 +72,11 @@ class _QrCameraPageState extends State<QrCameraPage>
       }
     } on FormatException catch (error) {
       if (mounted) setState(() => _message = error.message);
+    } on ApiException catch (error) {
+      // QR 유효시간이 지났을 때 등은 서버가 이유를 알려준다.
+      if (mounted) {
+        setState(() => _message = '${error.message}\n다시 스캔해주세요.');
+      }
     } catch (_) {
       if (mounted) setState(() => _message = '연결하지 못했어요. QR을 다시 스캔해주세요.');
     }

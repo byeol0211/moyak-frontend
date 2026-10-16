@@ -69,7 +69,7 @@ flutter run -d chrome --web-port 5555
 | 통화 중 채팅, 상담 종료 | ✅ 연결 (실제 통화 검증 전) | `GET·POST /consultations/{id}/messages`, `POST .../end` | `calls/consultation_chat.dart` |
 | 내 상담 내역 | ✅ 연결 | `GET /consultations?user_id=` (취소 건 제외) | `data/consultation_api.dart` |
 | 전자 구매 허가서 | ✅ 연결 | `GET /vending/purchases?user_id=` | 〃 |
-| QR 스캔으로 자판기 연결 | ❌ 미연결 | `POST /vending/scan` | `QrCameraPage.onScan` (QR 인식·형식 검사까지만 구현) |
+| QR 스캔으로 자판기 연결 | ✅ 연결 (기기 확인 완료) | `POST /vending/scan` | `data/machine_api.dart`, `qr_camera_page.dart` |
 | 통화 녹음·약사 검토 요약 | ❌ 미연결 | `/consultations/{cid}/session`, `/audio`, `/summary` | 없음 |
 | 로그인·회원가입 | ❌ 서버 API 없음 | — | 화면만 있음 |
 
@@ -121,6 +121,13 @@ lib/
 - 내 위치 버튼으로 현재 위치를 받아 거리순으로 정렬합니다. 위치를 못 받으면 기본 위치 기준입니다.
 - 검색은 거리와 관계없이 서버가 준 **전체 자판기**에서 이름·주소·자판기 코드를 대상으로, 띄어쓰기와 대소문자를 무시하고 찾습니다. 서버가 한 번에 주는 자판기는 최대 500곳입니다.
 
+**QR 연결** (`qr_camera_page.dart`, `machine_api.dart`)
+- 키오스크 화면의 QR(`{"machine_id": "VM-001", "qr_token": "..."}`)을 읽어 사용자 ID와 함께 `POST /vending/scan`으로 보냅니다. 성공하면 키오스크가 2초 안에 환영 화면으로 넘어갑니다.
+- 성공하면 홈이 "OO 연동됨"으로 바뀌고, 승인된 약이 있으면 "승인된 약품(약 이름)을 자판기에서 수령하실 수 있어요"를 안내합니다.
+- QR의 `machine_id`는 자판기 코드라서 지도 목록에서 같은 코드를 찾아 이름을 보여줍니다. 못 찾으면 코드를 그대로 씁니다.
+- 실패하면 서버 메시지(예: "유효하지 않은 QR입니다.", "만료된 QR입니다.")와 다시 스캔을 보여줍니다. 키오스크 QR은 55초마다 바뀝니다.
+- 테스트용 키오스크 QR 화면: https://moyak-backend.onrender.com/kiosk/pairing/?machine=VM-001
+
 **약사 상담** (`consultation_screen.dart`)
 - 실제 모드: 상담 요청 → 3초마다 상태·약사 입장 확인 → 승인(처방약 표시)·거절(사유)·종료(요약) 반영. 상담이 종료되거나 취소되면 확인을 멈춥니다.
 - 하단 "상담하기"로 들어오면(`direct`) 대화 요약 없이 요청하고, 화상방이 준비되면 바로 입장 화면으로 갑니다.
@@ -162,6 +169,7 @@ flutter build apk --release --split-per-abi --dart-define=API_BASE_URL=https://m
 | `test/widget_test.dart` | 스플래시 → 권한 → 로그인 진입 |
 | `test/chatbot_test.dart` | 챗봇 질문 전송, 대화 기록 전달, 서버 오류 표시 |
 | `test/screens_smoke_test.dart` | 402×874 화면에서 상담 미리보기, 상담 내역, 허가서, 챗봇, 지도 목록·검색·실제 재고 API, 스토어 |
+| `test/machine_scan_test.dart` | QR 로그인 요청 내용, 자판기 이름 찾기, 승인 약 안내, 만료·잘못된 QR 오류 |
 | `test/consultation_live_test.dart` | 실제 상담 API 흐름(가짜 서버): 요청·대화 전달, 진행 중 상담 재사용, 약사 입장·승인 반영, 취소, 오류 후 재시도, 상담 내역·허가서 변환 |
 | `test/frontend_flow_test.dart` | 입력 검증, QR 형식, 사용자 ID, 작은 화면과 키보드 배치 |
 | `test/daily_call_test.dart` | 화상 통화 제어·재시도·채팅·종료 (가짜 통화 엔진) |
@@ -169,7 +177,6 @@ flutter build apk --release --split-per-abi --dart-define=API_BASE_URL=https://m
 ## 남은 과제
 
 - **실제 화상 통화 검증:** 폰 앱과 약사 웹(`/pharmacist`)으로 같은 상담에 입장해 영상·음성·채팅·종료를 확인해야 합니다.
-- **QR 연결:** `QrCameraPage.onScan`에서 `POST /vending/scan`을 호출하고, 성공했을 때만 홈을 "연동됨"으로 바꿉니다.
 - **통화 녹음·약사 검토 요약** 연동
 - **카메라 미리보기 오류:** 권한 창이 뜰 때 카메라를 끄면서 처리되지 않은 오류가 로그에 남고, 권한 허용 직후 미리보기가 꺼진 상태로 보입니다(다시 누르면 켜짐). `widgets/device_camera_preview.dart`
 - **화면 배치 다듬기:** 실제 기기(갤럭시 S23)에서 조정이 필요한 부분이 있습니다.

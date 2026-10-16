@@ -4,6 +4,7 @@ import 'package:kakao_map_plugin/kakao_map_plugin.dart' show AuthRepository;
 
 import 'data/consultation_api.dart';
 import 'data/demo_data.dart';
+import 'data/machine_api.dart';
 import 'data/models.dart';
 import 'kakao_config.dart';
 import 'screens/chatbot_screen.dart';
@@ -281,13 +282,35 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _openQrScanner() {
+    MachineScanResult? scanned;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (routeContext) => QrCameraPage(
           onBack: () => Navigator.of(routeContext).pop(),
+          // 실제 모드: 스캔한 QR로 자판기에 로그인한다(POST /vending/scan).
+          // 실패하면 예외가 QR 화면에 그대로 전달돼 이유와 다시 스캔을 보여준다.
+          onScan: AppConfig.preview.value
+              ? null
+              : (qr) async {
+                  scanned = await scanMachineQr(
+                    machineId: qr.machineId,
+                    qrToken: qr.token,
+                    userId: _requireUserId(),
+                  );
+                },
           onConnected: () {
             Navigator.of(routeContext).pop();
-            if (AppConfig.preview.value) {
+            final result = scanned;
+            if (result != null) {
+              _connectMachine(result.machine, paired: true);
+              final drug = result.approvedDrugName;
+              showFeatureNotice(
+                context,
+                drug == null
+                    ? '자판기와 연동됐어요. 자판기 화면에서 이어서 진행해주세요.'
+                    : '자판기와 연동됐어요. 승인된 약품($drug)을 자판기에서 수령하실 수 있어요.',
+              );
+            } else if (AppConfig.preview.value) {
               _connectMachine(demoConnectedMachine, paired: true);
             }
           },
