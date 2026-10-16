@@ -5,52 +5,92 @@ import '../data/models.dart';
 import '../utils/format.dart';
 import '../widgets/consult_header.dart';
 import '../widgets/sub_page_scaffold.dart';
+import '../config/app_config.dart';
+import '../widgets/preview_list_controls.dart';
 
 /// 내 상담 내역: 지난 약사 상담의 결과(처방약·거절 사유)와 상담 요약을 다시 보는 화면.
 class ConsultHistoryScreen extends StatefulWidget {
   const ConsultHistoryScreen({
     required this.onOpenDetail,
     this.bottomNavigationBar,
+    this.loadRecords,
     super.key,
   });
 
   final ValueChanged<ConsultRecord> onOpenDetail;
   final Widget? bottomNavigationBar;
+  final Future<List<ConsultRecord>> Function()? loadRecords;
 
   @override
   State<ConsultHistoryScreen> createState() => _ConsultHistoryScreenState();
 }
 
 class _ConsultHistoryScreenState extends State<ConsultHistoryScreen> {
-  late final Future<List<ConsultRecord>> _history = fetchConsultHistory();
+  PreviewListState _previewState = PreviewListState.populated;
+  late Future<List<ConsultRecord>> _history = _load();
+  Future<List<ConsultRecord>> _load() async {
+    if (AppConfig.preview.value &&
+        _previewState != PreviewListState.populated) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (_previewState == PreviewListState.error) {
+        throw StateError('조회 실패 미리보기');
+      }
+      return [];
+    }
+    return (widget.loadRecords ?? fetchConsultHistory)();
+  }
 
   @override
   Widget build(BuildContext context) => SubPageScaffold(
     title: '내 상담 내역',
     bottomNavigationBar: widget.bottomNavigationBar,
-    child: FutureBuilder<List<ConsultRecord>>(
-      future: _history,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return SubPageMessage('오류: ${snapshot.error}', error: true);
-        }
-        final records = snapshot.data;
-        if (records == null) return const SubPageMessage('불러오는 중...');
-        if (records.isEmpty) {
-          return const SubPageMessage(
-            '아직 약사 상담 내역이 없어요.\n아래 가운데 "상담하기"를 누르면 약사와 바로 상담할 수 있어요.',
-          );
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.all(20),
-          itemCount: records.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 16),
-          itemBuilder: (context, index) => _HistoryCard(
-            record: records[index],
-            onOpenDetail: () => widget.onOpenDetail(records[index]),
+    child: Column(
+      children: [
+        if (AppConfig.preview.value)
+          PreviewListControls(
+            value: _previewState,
+            onChanged: (value) => setState(() {
+              _previewState = value;
+              _history = _load();
+            }),
           ),
-        );
-      },
+        Expanded(
+          child: FutureBuilder<List<ConsultRecord>>(
+            future: _history,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Column(
+                  children: [
+                    const SubPageMessage('상담 내역을 불러오지 못했어요.', error: true),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _history = _load();
+                      }),
+                      child: const Text('다시 시도'),
+                    ),
+                  ],
+                );
+              }
+              final records = snapshot.data;
+              if (records == null) return const SubPageMessage('불러오는 중...');
+              if (records.isEmpty) {
+                return const SubPageMessage(
+                  '아직 약사 상담 내역이 없어요.\n아래 가운데 "상담하기"를 누르면 약사와 바로 상담할 수 있어요.',
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.all(20),
+                itemCount: records.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 16),
+                itemBuilder: (context, index) => _HistoryCard(
+                  record: records[index],
+                  onOpenDetail: () => widget.onOpenDetail(records[index]),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     ),
   );
 }
@@ -93,7 +133,11 @@ class _HistoryCard extends StatelessWidget {
                   ),
                 ),
               ),
-              _StatusPill(status: record.status),
+              if (record.endedAt != null &&
+                  record.status == ConsultStatus.pending)
+                const Text('상담 종료')
+              else
+                _StatusPill(status: record.status),
             ],
           ),
           const SizedBox(height: 10),
@@ -204,7 +248,7 @@ class _ResultBox extends StatelessWidget {
       ),
       ConsultStatus.pending => (
         '진행 상황',
-        '약사 상담을 기다리고 있어요',
+        record.endedAt != null ? '상담이 종료되었어요' : '약사 상담을 기다리고 있어요',
         null,
         const Color(0xFFFFFDE7),
         const Color(0xFF593D0D),

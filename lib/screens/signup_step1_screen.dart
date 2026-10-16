@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'login_page.dart';
+import '../utils/input_validation.dart';
 
 const _background = Color(0xFFF5F5F3);
 const _brandYellow = Color(0xFFFFD54F);
@@ -30,12 +31,13 @@ class SignupStep1Screen extends StatefulWidget {
 }
 
 class _SignupStep1ScreenState extends State<SignupStep1Screen> {
-  final _usernameController = TextEditingController(text: 'moyak_user12');
-  bool? _isAvailable = true;
+  final _usernameController = TextEditingController();
+  bool? _isAvailable;
   bool _isChecking = false;
   String? _availabilityError;
 
-  bool get _canContinue => _usernameController.text.trim().isNotEmpty &&
+  bool get _canContinue =>
+      InputValidation.username(_usernameController.text) &&
       _isAvailable == true &&
       !_isChecking;
 
@@ -47,8 +49,7 @@ class _SignupStep1ScreenState extends State<SignupStep1Screen> {
 
   Future<void> _checkAvailability() async {
     final username = _usernameController.text.trim();
-    if (username.isEmpty ||
-        !RegExp(r'^[A-Za-z0-9_]{4,20}$').hasMatch(username)) {
+    if (!InputValidation.username(username)) {
       setState(() {
         _isAvailable = false;
         _availabilityError = '아이디는 영문, 숫자, 밑줄로 4~20자 입력해주세요.';
@@ -73,15 +74,18 @@ class _SignupStep1ScreenState extends State<SignupStep1Screen> {
     try {
       final available = await checkAvailability(username);
       if (!mounted) return;
+      if (_usernameController.text.trim() != username) return;
       setState(() {
         _isAvailable = available;
         _availabilityError = available ? null : '이미 사용 중인 아이디입니다.';
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _isAvailable = false;
-        _availabilityError = '아이디 확인 중 오류가 발생했습니다.';
+        _availabilityError = error is StateError
+            ? error.message.toString()
+            : '아이디 확인 중 오류가 발생했습니다.';
       });
     } finally {
       if (mounted) setState(() => _isChecking = false);
@@ -202,9 +206,8 @@ class _SignupStep1ScreenState extends State<SignupStep1Screen> {
             ),
             _SignupBottomAction(
               enabled: _canContinue,
-              onPressed: () => widget.onNext?.call(
-                _usernameController.text.trim(),
-              ),
+              onPressed: () =>
+                  widget.onNext?.call(_usernameController.text.trim()),
             ),
           ],
         ),
@@ -245,36 +248,8 @@ class _AvailabilityMessage extends StatelessWidget {
 
 class _SignupStatusBar extends StatelessWidget {
   const _SignupStatusBar();
-
   @override
-  Widget build(BuildContext context) => const SizedBox(
-    height: 44,
-    child: Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '9:41',
-            style: TextStyle(
-              color: _darkBrown,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Row(
-            children: [
-              Icon(Icons.signal_cellular_4_bar, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.wifi, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.battery_full, color: _darkBrown, size: 20),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _SignupHeader extends StatelessWidget {

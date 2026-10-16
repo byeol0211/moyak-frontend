@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../utils/input_validation.dart';
+
 const _background = Color(0xFFF5F5F3);
 const _brandYellow = Color(0xFFFFD54F);
 const _darkBrown = Color(0xFF3E2723);
@@ -29,10 +31,7 @@ class _SignupStep2ScreenState extends State<SignupStep2Screen> {
 
   bool get _passwordValid {
     final password = _passwordController.text;
-    return password.length >= 8 &&
-        RegExp(r'[A-Za-z]').hasMatch(password) &&
-        RegExp(r'\d').hasMatch(password) &&
-        RegExp(r'[^A-Za-z0-9]').hasMatch(password);
+    return InputValidation.password(password);
   }
 
   bool get _passwordsMatch =>
@@ -221,44 +220,14 @@ class _ValidationMessage extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: TextStyle(color: color, fontSize: 12, height: 1),
-  );
+  Widget build(BuildContext context) =>
+      Text(text, style: TextStyle(color: color, fontSize: 12, height: 1));
 }
 
 class _SignupStatusBar extends StatelessWidget {
   const _SignupStatusBar();
-
   @override
-  Widget build(BuildContext context) => const SizedBox(
-    height: 44,
-    child: Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '9:41',
-            style: TextStyle(
-              color: _darkBrown,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Row(
-            children: [
-              Icon(Icons.signal_cellular_4_bar, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.wifi, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.battery_full, color: _darkBrown, size: 20),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _SignupHeader extends StatelessWidget {
@@ -352,10 +321,7 @@ class _SignupProgress extends StatelessWidget {
 }
 
 class _SignupBottomAction extends StatelessWidget {
-  const _SignupBottomAction({
-    required this.enabled,
-    required this.onPressed,
-  });
+  const _SignupBottomAction({required this.enabled, required this.onPressed});
 
   final bool enabled;
   final VoidCallback? onPressed;

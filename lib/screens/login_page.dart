@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_config.dart';
+import '../data/app_session.dart';
+import '../widgets/feature_notice.dart';
+
 const _background = Color(0xFFF5F5F3);
 const _brandYellow = Color(0xFFFFD54F);
 const _darkBrown = Color(0xFF3E2723);
@@ -7,7 +11,7 @@ const _labelBrown = Color(0xFF7D6D6A);
 const _hintBrown = Color(0xFFBCAAA4);
 const _fieldBorder = Color(0xFFEFEBE9);
 
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
   const LoginPage({
     required this.onLogin,
     required this.onSignup,
@@ -18,6 +22,53 @@ class LoginPage extends StatelessWidget {
   final VoidCallback onLogin;
   final VoidCallback onSignup;
   final VoidCallback? onFindAccount;
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _username = TextEditingController();
+  final _password = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _username.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _enter({required bool preview, bool guest = false}) async {
+    if (_busy) return;
+    FocusScope.of(context).unfocus();
+    if (!preview &&
+        !guest &&
+        (_username.text.trim().isEmpty || _password.text.isEmpty)) {
+      setState(() => _error = '아이디와 비밀번호를 입력해주세요.');
+      return;
+    }
+    // There is no authentication API yet. Never pretend credentials were verified.
+    if (!preview && !guest) {
+      showFeatureNotice(context, '로그인은 준비 중이에요. 아래 화면 미리보기로 앱을 둘러보세요.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await AppSession.instance.initialize();
+      if (!mounted) return;
+      AppConfig.preview.value = preview;
+      widget.onLogin();
+    } catch (_) {
+      if (mounted) setState(() => _error = '앱 정보를 저장하지 못했어요. 다시 시도해주세요.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -49,22 +100,44 @@ class LoginPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 32),
-                  const LoginTextField(
+                  LoginTextField(
+                    controller: _username,
                     label: '아이디',
                     hint: '아이디를 입력해주세요',
                   ),
                   const SizedBox(height: 12),
-                  const LoginTextField(
+                  LoginTextField(
+                    controller: _password,
                     label: '비밀번호',
                     hint: '비밀번호를 입력해주세요',
                     obscureText: true,
                   ),
                   const SizedBox(height: 32),
-                  LoginPrimaryButton(label: '로그인', onPressed: onLogin),
+                  if (_error != null) ...[
+                    Text(_error!, style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: 12),
+                  ],
+                  LoginPrimaryButton(
+                    label: '로그인',
+                    enabled: !_busy,
+                    onPressed: () => _enter(preview: false),
+                  ),
+                  TextButton(
+                    onPressed: _busy ? null : () => _enter(preview: true),
+                    child: Text(_busy ? '준비 중...' : '회원가입 없이 화면 미리보기'),
+                  ),
+                  TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () => _enter(preview: false, guest: true),
+                    child: const Text('게스트로 계속하기'),
+                  ),
                   const SizedBox(height: 24),
                   _AccountLinks(
-                    onSignup: onSignup,
-                    onFindAccount: onFindAccount,
+                    onSignup: widget.onSignup,
+                    onFindAccount:
+                        widget.onFindAccount ??
+                        () => showFeatureNotice(context),
                   ),
                   const SizedBox(height: 32),
                   const SocialLoginDivider(),
@@ -102,17 +175,30 @@ class LoginPage extends StatelessWidget {
   );
 }
 
-class LoginTextField extends StatelessWidget {
+class LoginTextField extends StatefulWidget {
   const LoginTextField({
     required this.label,
     required this.hint,
     this.obscureText = false,
+    this.controller,
     super.key,
   });
 
   final String label;
   final String hint;
   final bool obscureText;
+  final TextEditingController? controller;
+
+  @override
+  State<LoginTextField> createState() => _LoginTextFieldState();
+}
+
+class _LoginTextFieldState extends State<LoginTextField> {
+  bool _visible = false;
+  String get label => widget.label;
+  String get hint => widget.hint;
+  bool get obscureText => widget.obscureText && !_visible;
+  TextEditingController? get controller => widget.controller;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -130,14 +216,26 @@ class LoginTextField extends StatelessWidget {
       SizedBox(
         height: 52,
         child: TextField(
+          controller: controller,
+          autocorrect: false,
+          enableSuggestions: !obscureText,
           obscureText: obscureText,
           style: const TextStyle(color: _darkBrown, fontSize: 15),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: _hintBrown, fontSize: 15),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-            suffixIcon: obscureText
-                ? const Icon(Icons.visibility_off_outlined, size: 20)
+            suffixIcon: widget.obscureText
+                ? IconButton(
+                    tooltip: _visible ? '비밀번호 숨기기' : '비밀번호 보기',
+                    onPressed: () => setState(() => _visible = !_visible),
+                    icon: Icon(
+                      _visible
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      size: 20,
+                    ),
+                  )
                 : null,
             suffixIconColor: _hintBrown,
             filled: true,
@@ -231,61 +329,37 @@ class SocialLoginButton extends StatelessWidget {
   final bool outlined;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 48,
-    height: 48,
-    decoration: BoxDecoration(
-      color: backgroundColor,
-      shape: BoxShape.circle,
-      border: outlined ? Border.all(color: _fieldBorder) : null,
-    ),
-    child: Center(
-      child: label == null
-          ? Icon(icon, color: iconColor, size: 24)
-          : Text(
-              label!,
-              style: TextStyle(
-                color: iconColor,
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
+  Widget build(BuildContext context) => InkWell(
+    onTap: () => showFeatureNotice(context, '소셜 로그인은 준비 중이에요.'),
+    customBorder: const CircleBorder(),
+    child: Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        shape: BoxShape.circle,
+        border: outlined ? Border.all(color: _fieldBorder) : null,
+      ),
+      child: Center(
+        child: label == null
+            ? Icon(icon, color: iconColor, size: 24)
+            : Text(
+                label!,
+                style: TextStyle(
+                  color: iconColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-            ),
+      ),
     ),
   );
 }
 
 class _StatusBar extends StatelessWidget {
   const _StatusBar();
-
   @override
-  Widget build(BuildContext context) => const SizedBox(
-    height: 44,
-    child: Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '9:41',
-            style: TextStyle(
-              color: _darkBrown,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Row(
-            children: [
-              Icon(Icons.signal_cellular_4_bar, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.wifi, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.battery_full, color: _darkBrown, size: 20),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _LoginHeader extends StatelessWidget {

@@ -12,6 +12,8 @@ import 'package:moyak/screens/consult_history_screen.dart';
 import 'package:moyak/screens/consultation_screen.dart';
 import 'package:moyak/screens/map_screen/map_screen.dart';
 import 'package:moyak/screens/permit_list_screen.dart';
+import 'package:moyak/config/app_config.dart';
+import 'package:moyak/data/app_session.dart';
 
 Future<void> _pumpPhone(WidgetTester tester, Widget child) async {
   tester.view.physicalSize = const Size(402, 874);
@@ -21,6 +23,13 @@ Future<void> _pumpPhone(WidgetTester tester, Widget child) async {
 }
 
 void main() {
+  setUp(() {
+    AppConfig.preview.value = true;
+    AppSession.instance.cancelConsultation();
+    AppSession.instance.history.clear();
+    AppSession.instance.permits.clear();
+  });
+  tearDown(() => AppConfig.preview.value = false);
   testWidgets('consultation: waiting → entry when the room is ready', (
     tester,
   ) async {
@@ -33,14 +42,11 @@ void main() {
 
     await tester.pump(const Duration(seconds: 3));
     expect(find.text('화상 상담 입장'), findsWidgets);
-    expect(find.text('카메라 권한을 확인하는 중이에요...'), findsOneWidget);
-
-    await tester.pump(const Duration(milliseconds: 1300));
-    expect(find.text('카메라와 마이크가 정상적으로 연결됐어요.'), findsOneWidget);
-    expect(find.text('연결 준비됨'), findsOneWidget);
+    expect(find.text('카메라 켜기'), findsOneWidget);
+    expect(find.text('통화 화면 미리보기'), findsOneWidget);
 
     // 뒤로가면 대기 화면에서 입장 버튼이 보이고, 약사가 들어오면 문구가 바뀐다
-    await tester.tap(find.bySemanticsLabel('이전 화면'));
+    await tester.tap(find.byTooltip('이전 화면'));
     await tester.pump();
     expect(find.text('🎥 화상 상담 입장하기'), findsOneWidget);
     await tester.pump(const Duration(seconds: 8));
@@ -106,7 +112,7 @@ void main() {
     await _pumpPhone(tester, const PermitListScreen());
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('사용 가능'), findsOneWidget);
-    expect(find.text('2025.01.15 ~ 2025.07.15'), findsOneWidget);
+    expect(find.textContaining('${DateTime.now().year}.'), findsOneWidget);
   });
 
   testWidgets('chatbot renders formatted answer and consult button', (
@@ -149,13 +155,34 @@ void main() {
     tester,
   ) async {
     VendingMachine? selected;
-    final client = MockClient(
-      (_) async => http.Response(
+    final client = MockClient((request) async {
+      // 자판기 상세 재고 (GET /api/v1/map/machines/{id})
+      if (request.url.path == '/api/v1/map/machines/near') {
+        return http.Response(
+          jsonEncode({
+            'id': 'near',
+            'items': [
+              {'item_seq': '1', 'item_name': '베아제정', 'stock': 8, 'price': 4000},
+              {
+                'item_seq': '2',
+                'item_name': '판콜에이내복액',
+                'stock': 0,
+                'price': 1500,
+              },
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }
+      return http.Response(
         jsonEncode({
           'items': [
             {
               'id': 'far',
+              'code': 'VM-009',
               'name': '모약 자판기 도서관',
+              'address': '서울 마포구 양화로 160',
               'latitude': 37.47,
               'longitude': 126.66,
               'stock_count': 0,
@@ -172,8 +199,8 @@ void main() {
         }),
         200,
         headers: {'content-type': 'application/json; charset=utf-8'},
-      ),
-    );
+      );
+    });
     await _pumpPhone(
       tester,
       MapScreen(
@@ -188,11 +215,30 @@ void main() {
     expect(find.text('재고 있음'), findsOneWidget);
     expect(find.text('품절'), findsOneWidget);
 
+    await tester.enterText(find.byKey(const Key('machine-search')), '없는 이름');
+    await tester.pumpAndSettle();
+    expect(find.text('검색 결과가 없어요. 자판기 이름이나 주소를 다시 확인해주세요.'), findsOneWidget);
+    await tester.tap(find.byTooltip('자판기 검색어 지우기'));
+    await tester.pumpAndSettle();
+    expect(find.text('가까운 자판기 2곳'), findsOneWidget);
+    // 주소·코드로도, 띄어쓰기가 달라도 찾는다
+    await tester.enterText(find.byKey(const Key('machine-search')), '마포 구');
+    await tester.pumpAndSettle();
+    expect(find.text('전체 자판기 검색 결과 1곳'), findsOneWidget);
+    expect(find.text('모약 자판기 도서관'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('machine-search')), 'vm-009');
+    await tester.pumpAndSettle();
+    expect(find.text('모약 자판기 도서관'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('machine-search')), ' 학생 회관 ');
+    await tester.pumpAndSettle();
+    expect(find.text('전체 자판기 검색 결과 1곳'), findsOneWidget);
+    expect(find.text('모약 자판기 도서관'), findsNothing);
     await tester.tap(find.text('모약 자판기 학생회관'));
     await tester.pump(const Duration(seconds: 1));
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
     expect(find.textContaining('베아제정'), findsOneWidget);
+    await tester.ensureVisible(find.text('이 자판기 선택'));
     await tester.tap(find.text('이 자판기 선택'));
     expect(selected?.id, 'near');
   });
@@ -210,8 +256,9 @@ void main() {
       ),
     );
     expect(find.text('모약 자판기 학생회관'), findsOneWidget);
-    expect(find.text('3,000원'), findsOneWidget);
+    expect(find.text('재고 3개'), findsOneWidget);
     expect(find.text('품절'), findsOneWidget);
-    expect(find.text('가격 정보 없음'), findsOneWidget);
+    expect(find.text('재고 5개'), findsOneWidget);
+    expect(find.text('빠른 구매'), findsNothing);
   });
 }

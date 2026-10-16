@@ -26,6 +26,7 @@ class Onboarding2Screen extends StatelessWidget {
     onNext: onNext,
   );
 }
+
 class OnboardingPage extends StatelessWidget {
   const OnboardingPage({
     required this.title,
@@ -60,8 +61,9 @@ class OnboardingPage extends StatelessWidget {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final previewWidth =
-                (constraints.maxWidth - 62).clamp(0.0, 339.0).toDouble();
+            final previewWidth = (constraints.maxWidth - 62)
+                .clamp(0.0, 339.0)
+                .toDouble();
 
             return Stack(
               fit: StackFit.expand,
@@ -107,39 +109,10 @@ class OnboardingPage extends StatelessWidget {
   );
 }
 
-
 class _OnboardingStatusBar extends StatelessWidget {
   const _OnboardingStatusBar();
-
   @override
-  Widget build(BuildContext context) => const SizedBox(
-    height: 44,
-    child: Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '9:41',
-            style: TextStyle(
-              color: _darkBrown,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Row(
-            children: [
-              Icon(Icons.signal_cellular_4_bar, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.wifi, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.battery_full, color: _darkBrown, size: 20),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _SkipAction extends StatelessWidget {
@@ -202,11 +175,7 @@ class _OnboardingText extends StatelessWidget {
         Text(
           subtitle,
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: _labelBrown,
-            fontSize: 15,
-            height: 1.5,
-          ),
+          style: TextStyle(color: _labelBrown, fontSize: 15, height: 1.5),
         ),
       ],
     ),

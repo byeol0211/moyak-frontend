@@ -34,12 +34,16 @@ class PermissionScreen extends StatelessWidget {
           const ColoredBox(color: _overlay),
           SafeArea(
             bottom: false,
-            child: Column(
-              children: [
-                const _PermissionStatusBar(),
-                const Spacer(),
-                _PermissionBottomSheet(onAllow: onAllow),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [_PermissionBottomSheet(onAllow: onAllow)],
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -87,11 +91,7 @@ class _PermissionBottomSheet extends StatelessWidget {
             SizedBox(height: 8),
             Text(
               '모약 서비스를 편리하게 이용하기 위해 다음 권한 허용이 필요합니다.',
-              style: TextStyle(
-                color: _labelBrown,
-                fontSize: 14,
-                height: 1,
-              ),
+              style: TextStyle(color: _labelBrown, fontSize: 14, height: 1),
             ),
           ],
         ),
@@ -115,7 +115,7 @@ class _PermissionBottomSheet extends StatelessWidget {
             _PermissionRow(
               iconAsset: 'assets/figma/microphone_permission.svg',
               title: '마이크 (선택)',
-              description: '음성 명령 및 실시간 건강 상담 시 활용됩니다.',
+              description: '약사와 화상 상담할 때 사용됩니다.',
             ),
           ],
         ),
@@ -123,17 +123,13 @@ class _PermissionBottomSheet extends StatelessWidget {
         Column(
           children: [
             const Text(
-              '선택 권한은 동의하지 않아도 앱을 이용할 수 있습니다.',
+              '권한은 해당 기능을 사용할 때 요청합니다.\n허용하지 않아도 다른 기능을 이용할 수 있어요.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: _hintBrown,
-                fontSize: 12,
-                height: 1,
-              ),
+              style: TextStyle(color: _hintBrown, fontSize: 12, height: 1),
             ),
             const SizedBox(height: 12),
             LoginPrimaryButton(
-              label: '허용하기',
+              label: '계속하기',
               onPressed: onAllow ?? () => Navigator.of(context).maybePop(),
             ),
           ],
@@ -195,39 +191,5 @@ class _PermissionRow extends StatelessWidget {
         ),
       ),
     ],
-  );
-}
-
-class _PermissionStatusBar extends StatelessWidget {
-  const _PermissionStatusBar();
-
-  @override
-  Widget build(BuildContext context) => const SizedBox(
-    height: 44,
-    child: Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '9:41',
-            style: TextStyle(
-              color: Color(0xFF212121),
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Row(
-            children: [
-              Icon(Icons.signal_cellular_4_bar, color: Colors.white, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.wifi, color: Colors.white, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.battery_full, color: Colors.white, size: 20),
-            ],
-          ),
-        ],
-      ),
-    ),
   );
 }

@@ -5,51 +5,78 @@ import 'package:flutter/services.dart';
 
 import '../data/models.dart';
 import '../utils/format.dart';
-import '../widgets/app_status_bar.dart';
 import '../widgets/consult_header.dart';
-import 'video_consultation_page.dart';
+import 'consultation_entry_page.dart';
+import '../config/app_config.dart';
+import '../data/api_client.dart';
+import '../data/app_session.dart';
+import '../data/consultation_api.dart';
+import '../calls/call_room.dart';
+import '../calls/consultation_chat.dart';
 
-const _lightMint = Color(0xFF65D6A8);
 const _cardCream = Color(0xFFFFFCF6);
-const _darkHeader = Color(0xFF1F2624);
-const _darkBody = Color(0xFF18201E);
 const _danger = Color(0xFFC94C43);
 const _dangerBackground = Color(0xFFFBE7E4);
-const _toggleOff = Color(0xFFC9C1B6);
 
 /// 약사 상담 흐름: 연결 대기 → 화상 상담 입장.
 ///
 /// - 하단 "상담하기"로 들어오면([direct]) 화상방이 준비되는 즉시 입장 화면으로 넘어간다.
 /// - 챗봇의 "약사에게 바로 상담하기"로 들어오면 대기 화면에 머물며 입장 버튼을 보여준다.
 /// - [record]를 주면 지난 상담의 결과(처방 완료·거절)를 보여준다.
+/// - 미리보기가 아니면 백엔드 상담 API로 요청·상태 확인·취소를 한다.
 class ConsultationScreen extends StatefulWidget {
   const ConsultationScreen({
     required this.onScanQr,
     required this.onOpenChatbot,
     this.direct = true,
     this.record,
+    this.room,
+    this.chat,
+    this.onClosed,
+    this.api,
     super.key,
   });
 
   final VoidCallback onScanQr;
 
+  /// 상담이 취소돼 다음에 들어오면 새 상담을 요청해야 할 때.
+  final VoidCallback? onClosed;
+
+  /// 테스트에서 가짜 서버를 넣을 때 쓴다.
+  final ConsultationApi? api;
+
   /// 상담 요청 취소, "챗봇으로 돌아가기" 후 이동할 곳.
   final VoidCallback onOpenChatbot;
   final bool direct;
   final ConsultRecord? record;
+  final CallRoom? room;
+  final ConsultationChat? chat;
 
   @override
   State<ConsultationScreen> createState() => _ConsultationScreenState();
 }
 
 class _ConsultationScreenState extends State<ConsultationScreen> {
-  // 상담 API 연동 전이라 화상방 준비·약사 입장을 시간차로 흉내 낸다.
+  // 미리보기 모드는 화상방 준비·약사 입장을 시간차로 흉내 낸다.
   static const _roomReadyDelay = Duration(seconds: 3);
   static const _pharmacistJoinDelay = Duration(seconds: 8);
 
-  late final DateTime _requestedAt = widget.record?.createdAt ?? DateTime.now();
-  late final ConsultStatus _status =
-      widget.record?.status ?? ConsultStatus.pending;
+  // 실제 모드: 백엔드 HTML과 같이 3초마다 상담 상태와 약사 입장 여부를 확인한다.
+  static const _pollInterval = Duration(seconds: 3);
+
+  /// 지난 상담 보기(record)가 아니고 미리보기도 아니면 실제 서버로 진행한다.
+  bool get _live => !AppConfig.preview.value && widget.record == null;
+  late final ConsultationApi _api = widget.api ?? ConsultationApi();
+  ConsultationSnapshot? _snapshot;
+  bool _requesting = false;
+  String? _requestError;
+  bool _polling = false;
+
+  late DateTime _requestedAt = widget.record?.createdAt ?? DateTime.now();
+  ConsultRecord? _previewRecord;
+  ConsultRecord? get _record =>
+      _snapshot?.record ?? _previewRecord ?? widget.record;
+  ConsultStatus get _status => _record?.status ?? ConsultStatus.pending;
   late bool _roomReady = widget.record != null;
   Duration _elapsed = Duration.zero;
   bool _pharmacistIn = false;
@@ -59,17 +86,28 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
   @override
   void initState() {
     super.initState();
-    if (_status != ConsultStatus.pending) return;
-    _tickClock();
-    _timers.add(
-      Timer.periodic(const Duration(seconds: 1), (_) => _tickClock()),
-    );
+    if (_live) {
+      _requestConsultation();
+      return;
+    }
+    if (widget.room != null) {
+      _roomReady = true;
+      _showingEntry = widget.direct;
+      return;
+    }
+    if (!AppConfig.preview.value) return;
+    if (_status != ConsultStatus.pending || _record?.endedAt != null) return;
+    _startClock();
     if (_roomReady) {
       _schedulePharmacistJoin();
     } else {
       _timers.add(
         Timer(_roomReadyDelay, () {
-          if (!mounted) return;
+          if (!mounted ||
+              _status != ConsultStatus.pending ||
+              _record?.endedAt != null) {
+            return;
+          }
           setState(() {
             _roomReady = true;
             _showingEntry = widget.direct;
@@ -78,6 +116,13 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
         }),
       );
     }
+  }
+
+  void _startClock() {
+    _tickClock();
+    _timers.add(
+      Timer.periodic(const Duration(seconds: 1), (_) => _tickClock()),
+    );
   }
 
   void _tickClock() {
@@ -91,11 +136,123 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
     }),
   );
 
-  @override
-  void dispose() {
+  void _stopTimers() {
     for (final timer in _timers) {
       timer.cancel();
     }
+    _timers.clear();
+  }
+
+  /// 진행 중인 상담이 있으면 이어서 보고, 없으면 새로 요청한다.
+  Future<void> _requestConsultation() async {
+    final userId = AppSession.instance.userId;
+    if (userId == null) {
+      setState(() => _requestError = '사용자 정보를 확인하지 못했어요. 다시 로그인해주세요.');
+      return;
+    }
+    setState(() {
+      _requesting = true;
+      _requestError = null;
+    });
+    try {
+      final snapshot = await _api.findOrCreate(
+        userId: userId,
+        chatSummary: widget.direct ? '' : AppSession.instance.chatSummary,
+      );
+      if (!mounted) return;
+      _applySnapshot(snapshot, first: true);
+      if (!snapshot.finished) {
+        _startClock();
+        _timers.add(Timer.periodic(_pollInterval, (_) => _poll()));
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _requestError = error is ApiException
+              ? error.message
+              : '서버에 연결하지 못했어요. 네트워크 상태를 확인해주세요.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _requesting = false);
+    }
+  }
+
+  void _applySnapshot(ConsultationSnapshot snapshot, {bool first = false}) {
+    final session = AppSession.instance;
+    if (snapshot.cancelled) {
+      // 약사 웹이나 다른 화면에서 취소된 경우
+      _closeLive();
+      return;
+    }
+    setState(() {
+      _snapshot = snapshot;
+      _requestedAt = snapshot.record.createdAt;
+    });
+    session.setLiveConsultation(snapshot.record);
+    final roomUrl = snapshot.roomUrl;
+    if (snapshot.finished) {
+      if (session.callConsultationId == snapshot.id) session.clearCallRoom();
+      return;
+    }
+    if (roomUrl != null && session.callConsultationId != snapshot.id) {
+      try {
+        session.attachCallRoom(
+          CallRoom.fromJson(snapshot.raw),
+          consultationId: snapshot.id,
+        );
+      } on FormatException {
+        return;
+      }
+    }
+    if (roomUrl != null && !_roomReady) {
+      setState(() {
+        _roomReady = true;
+        // 하단 "상담하기"로 들어왔으면 대기 화면을 건너뛰고 바로 입장 화면으로 간다.
+        if (first && widget.direct && _status == ConsultStatus.pending) {
+          _showingEntry = true;
+        }
+      });
+    }
+  }
+
+  Future<void> _poll() async {
+    final current = _snapshot;
+    if (current == null || _polling) return;
+    _polling = true;
+    try {
+      final next = await _api.get(current.id);
+      if (!mounted) return;
+      _applySnapshot(next);
+      if (next.finished) {
+        _stopTimers();
+        return;
+      }
+      if (next.roomUrl != null && next.record.summary == null) {
+        final inRoom = await _api.pharmacistInRoom(next.id);
+        if (mounted && inRoom != null && inRoom != _pharmacistIn) {
+          setState(() => _pharmacistIn = inRoom);
+        }
+      }
+    } catch (_) {
+      // 네트워크가 잠깐 끊긴 경우 다음 확인 때 다시 시도한다.
+    } finally {
+      _polling = false;
+    }
+  }
+
+  void _closeLive() {
+    _stopTimers();
+    AppSession.instance.clearCallRoom();
+    AppSession.instance.cancelConsultation();
+    widget.onClosed?.call();
+    widget.onOpenChatbot();
+  }
+
+  @override
+  void dispose() {
+    _stopTimers();
+    if (widget.api == null) _api.close();
     super.dispose();
   }
 
@@ -118,30 +275,181 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    for (final timer in _timers) {
-      timer.cancel();
+    if (_live) {
+      final snapshot = _snapshot;
+      if (snapshot != null) {
+        try {
+          await _api.cancel(snapshot.id);
+        } catch (error) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  error is ApiException
+                      ? '취소하지 못했어요: ${error.message}'
+                      : '상담 취소를 반영하지 못했어요. 다시 시도해주세요.',
+                ),
+              ),
+            );
+          }
+          return;
+        }
+      }
+      if (mounted) _closeLive();
+      return;
     }
+    if (widget.room != null) {
+      if (widget.chat == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('상담 취소에 필요한 서버 연결 정보가 없어요.')),
+        );
+        return;
+      }
+      try {
+        await widget.chat!.cancel();
+        if (!mounted) return;
+        AppSession.instance.clearCallRoom();
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('상담 취소를 반영하지 못했어요. 다시 시도해주세요.')),
+          );
+        }
+        return;
+      }
+    }
+    _stopTimers();
+    AppSession.instance.cancelConsultation();
+    widget.onClosed?.call();
     widget.onOpenChatbot();
   }
 
+  /// 화상 통화 화면에서 상담을 마치고 돌아왔을 때.
+  void _handleCallEnded() {
+    if (_live) {
+      setState(() => _showingEntry = false);
+      _poll();
+      return;
+    }
+    _stopTimers();
+    if (widget.room == null) {
+      AppSession.instance.endPreviewConsultation();
+    }
+    setState(() {
+      _showingEntry = false;
+      _previewRecord = widget.room == null
+          ? AppSession.instance.consultation
+          : ConsultRecord(
+              id: AppSession.instance.callConsultationId ?? 'completed',
+              createdAt: _requestedAt,
+              status: _status,
+              endedAt: DateTime.now(),
+              summary: widget.chat?.summary ?? '상담이 종료되었습니다. 상담 요약을 준비 중이에요.',
+            );
+    });
+    if (widget.room != null) AppSession.instance.clearCallRoom();
+  }
+
   @override
-  Widget build(BuildContext context) => _showingEntry
-      ? _VideoConsultationEntryView(
-          onBack: () => setState(() => _showingEntry = false),
-          onScanQr: widget.onScanQr,
-        )
-      : _PharmacistWaitingView(
-          status: _status,
-          record: widget.record,
-          requestedAt: _requestedAt,
-          elapsed: _elapsed,
-          roomReady: _roomReady,
-          pharmacistIn: _pharmacistIn,
-          onScanQr: widget.onScanQr,
-          onJoin: () => setState(() => _showingEntry = true),
-          onCancel: _confirmCancel,
-          onOpenChatbot: widget.onOpenChatbot,
-        );
+  Widget build(BuildContext context) {
+    // 실제 모드에서 상담이 만들어지기 전: 요청 중이거나 실패한 상태를 보여준다.
+    final waitingForServer = _live && _snapshot == null;
+    return Column(
+      children: [
+        if (AppConfig.preview.value &&
+            widget.record == null &&
+            widget.room == null)
+          Material(
+            color: const Color(0xFFFFE7AC),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text('예시 상담 상태', style: TextStyle(fontSize: 12)),
+                  ),
+                  DropdownButton<ConsultStatus>(
+                    value: _status,
+                    items: const [
+                      DropdownMenuItem(
+                        value: ConsultStatus.pending,
+                        child: Text('대기'),
+                      ),
+                      DropdownMenuItem(
+                        value: ConsultStatus.approved,
+                        child: Text('승인'),
+                      ),
+                      DropdownMenuItem(
+                        value: ConsultStatus.rejected,
+                        child: Text('거절'),
+                      ),
+                    ],
+                    onChanged: (status) {
+                      if (status == null) return;
+                      _stopTimers();
+                      final session = AppSession.instance;
+                      if (session.consultation == null) {
+                        session.startConsultation(direct: widget.direct);
+                      }
+                      session.previewDecision(status);
+                      setState(() {
+                        _previewRecord = session.consultation;
+                        _showingEntry = false;
+                        _roomReady = status == ConsultStatus.pending;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        Expanded(
+          child: _showingEntry
+              ? ConsultationEntryPage(
+                  room: widget.room,
+                  chat: widget.chat,
+                  onBack: () => setState(() => _showingEntry = false),
+                  onScanQr: widget.onScanQr,
+                  onEnd: _handleCallEnded,
+                )
+              : _PharmacistWaitingView(
+                  status: _status,
+                  record: _record,
+                  requestedAt: _requestedAt,
+                  elapsed: _elapsed,
+                  roomReady: _roomReady,
+                  pharmacistIn: _pharmacistIn,
+                  notice: !waitingForServer
+                      ? null
+                      : _requestError != null
+                      ? ('상담 요청에 실패했어요', _requestError!)
+                      : ('상담을 요청하고 있어요', '서버가 잠들어 있으면 최대 1분쯤 걸릴 수 있어요.'),
+                  onRetry: waitingForServer && _requestError != null
+                      ? _requestConsultation
+                      : null,
+                  requesting: _requesting,
+                  onScanQr: widget.onScanQr,
+                  onJoin: () => setState(() => _showingEntry = true),
+                  onCancel: _confirmCancel,
+                  onOpenChatbot: widget.onOpenChatbot,
+                ),
+        ),
+        if (AppConfig.preview.value &&
+            !widget.direct &&
+            widget.record == null &&
+            AppSession.instance.consultationChatSummary.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              '약사에게 전달할 대화\n${AppSession.instance.consultationChatSummary}',
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _PharmacistWaitingView extends StatelessWidget {
@@ -156,8 +464,15 @@ class _PharmacistWaitingView extends StatelessWidget {
     required this.onJoin,
     required this.onCancel,
     required this.onOpenChatbot,
+    this.notice,
+    this.onRetry,
+    this.requesting = false,
   });
 
+  /// 상담이 만들어지기 전 안내(제목, 내용). 있으면 상태 문구 대신 보여준다.
+  final (String, String)? notice;
+  final VoidCallback? onRetry;
+  final bool requesting;
   final ConsultStatus status;
   final ConsultRecord? record;
   final DateTime requestedAt;
@@ -177,17 +492,22 @@ class _PharmacistWaitingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final summary = record?.summary;
-    final (statusLabel, queueText) = switch (status) {
-      ConsultStatus.pending => ('약사를 찾고 있어요', '약사 연결을 기다리는 중이에요'),
-      ConsultStatus.approved => (
-        '약사가 처방을 완료했어요',
-        '처방약: ${record?.approvedDrugName ?? '-'}',
-      ),
-      ConsultStatus.rejected => (
-        '상담이 거절되었어요',
-        record?.decisionReason ?? '사유가 별도로 전달되지 않았습니다.',
-      ),
-    };
+    final ended = record?.endedAt != null;
+    final (statusLabel, queueText) = notice != null
+        ? notice!
+        : ended && status == ConsultStatus.pending
+        ? ('상담이 종료되었어요', '상담 내역에서 결과를 확인해주세요.')
+        : switch (status) {
+            ConsultStatus.pending => ('약사를 찾고 있어요', '약사 연결을 기다리는 중이에요'),
+            ConsultStatus.approved => (
+              '약사가 처방을 완료했어요',
+              '처방약: ${record?.approvedDrugName ?? '-'}',
+            ),
+            ConsultStatus.rejected => (
+              '상담이 거절되었어요',
+              record?.decisionReason ?? '사유가 별도로 전달되지 않았습니다.',
+            ),
+          };
     final step3Description = switch (status) {
       ConsultStatus.approved => '화상 상담이 끝났다면 자판기에서 QR을 스캔해 수령하세요',
       _ when pharmacistIn => '약사가 화상 상담방에서 기다리고 있어요',
@@ -215,14 +535,16 @@ class _PharmacistWaitingView extends StatelessWidget {
                   children: [
                     _WaitingCard(
                       statusLabel: statusLabel,
-                      dialLabel: status == ConsultStatus.pending
+                      dialLabel: status == ConsultStatus.pending && !ended
                           ? '대기 시간'
                           : '상담',
-                      dialValue: switch (status) {
-                        ConsultStatus.pending => _elapsedLabel,
-                        ConsultStatus.approved => '완료',
-                        ConsultStatus.rejected => '종료',
-                      },
+                      dialValue: ended
+                          ? '종료'
+                          : switch (status) {
+                              ConsultStatus.pending => _elapsedLabel,
+                              ConsultStatus.approved => '완료',
+                              ConsultStatus.rejected => '종료',
+                            },
                       queueText: queueText,
                       requestedAt: requestedAt,
                       progress: status == ConsultStatus.pending ? 0.6 : 1,
@@ -233,7 +555,10 @@ class _PharmacistWaitingView extends StatelessWidget {
                       entryDone: status == ConsultStatus.approved,
                       entryDescription: step3Description,
                     ),
-                    if (status == ConsultStatus.pending && roomReady) ...[
+                    if (notice == null &&
+                        status == ConsultStatus.pending &&
+                        roomReady &&
+                        !ended) ...[
                       const SizedBox(height: 14),
                       _JoinNowButton(pharmacistIn: pharmacistIn, onTap: onJoin),
                     ],
@@ -255,14 +580,36 @@ class _PharmacistWaitingView extends StatelessWidget {
                     ],
                     const SizedBox(height: 14),
                     const _PrivacyNotice(),
-                    if (status == ConsultStatus.pending) ...[
+                    if (onRetry != null) ...[
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        height: 52,
+                        child: FilledButton.icon(
+                          onPressed: requesting ? null : onRetry,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: consultGreen,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('다시 요청하기'),
+                        ),
+                      ),
+                    ],
+                    if (status == ConsultStatus.pending && !ended) ...[
                       const SizedBox(height: 14),
                       _BottomActionButton(
                         label: '상담 요청 취소',
                         icon: Icons.close,
                         onTap: onCancel,
                       ),
-                    ] else if (status == ConsultStatus.rejected) ...[
+                    ] else if (status == ConsultStatus.rejected || ended) ...[
                       const SizedBox(height: 14),
                       _BottomActionButton(
                         label: '챗봇으로 돌아가기',
@@ -757,550 +1104,5 @@ class _BottomActionButton extends StatelessWidget {
         ],
       ),
     ),
-  );
-}
-
-class _VideoConsultationEntryView extends StatefulWidget {
-  const _VideoConsultationEntryView({
-    required this.onBack,
-    required this.onScanQr,
-  });
-
-  final VoidCallback onBack;
-  final VoidCallback onScanQr;
-
-  @override
-  State<_VideoConsultationEntryView> createState() =>
-      _VideoConsultationEntryViewState();
-}
-
-class _VideoConsultationEntryViewState
-    extends State<_VideoConsultationEntryView> {
-  // 실제 카메라 권한 확인 대신 잠시 확인 중 상태를 보여준다.
-  static const _deviceCheckDelay = Duration(milliseconds: 1200);
-
-  Timer? _deviceCheckTimer;
-  bool _checkingDevices = true;
-  bool _cameraEnabled = true;
-  bool _microphoneEnabled = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _deviceCheckTimer = Timer(_deviceCheckDelay, () {
-      if (mounted) setState(() => _checkingDevices = false);
-    });
-  }
-
-  @override
-  void dispose() {
-    _deviceCheckTimer?.cancel();
-    super.dispose();
-  }
-
-  void _toggleCamera() {
-    if (!_checkingDevices) setState(() => _cameraEnabled = !_cameraEnabled);
-  }
-
-  void _toggleMicrophone() {
-    if (!_checkingDevices) {
-      setState(() => _microphoneEnabled = !_microphoneEnabled);
-    }
-  }
-
-  void _enterConsultation() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const VideoConsultationPage()),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: SystemUiOverlayStyle.light.copyWith(statusBarColor: _darkHeader),
-    child: ColoredBox(
-      color: _darkBody,
-      child: Column(
-        children: [
-          DecoratedBox(
-            decoration: const BoxDecoration(
-              color: _darkHeader,
-              border: Border(bottom: BorderSide(color: Color(0x1AFFFFFF))),
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Column(
-                children: [
-                  const AppStatusBar(color: Colors.white),
-                  SizedBox(
-                    height: 60,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 16, 0),
-                      child: Row(
-                        children: [
-                          Material(
-                            color: const Color(0x14FFFFFF),
-                            shape: const CircleBorder(),
-                            child: InkWell(
-                              onTap: widget.onBack,
-                              customBorder: const CircleBorder(),
-                              child: const SizedBox(
-                                width: 36,
-                                height: 36,
-                                child: Icon(
-                                  Icons.chevron_left,
-                                  color: Colors.white,
-                                  semanticLabel: '이전 화면',
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          const Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '화상 상담 입장',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                Text(
-                                  '입장 전 화면과 소리를 확인해 주세요',
-                                  style: TextStyle(
-                                    color: Color(0xB8FFFFFF),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          QrScanPill(onTap: widget.onScanQr, dark: true),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _CameraPreview(
-                    cameraEnabled: _cameraEnabled,
-                    microphoneEnabled: _microphoneEnabled,
-                    onToggleCamera: _toggleCamera,
-                    onToggleMicrophone: _toggleMicrophone,
-                  ),
-                  const SizedBox(height: 12),
-                  _ReadyMessage(checking: _checkingDevices),
-                  const SizedBox(height: 12),
-                  _DeviceCheckTile(
-                    icon: Icons.videocam_outlined,
-                    title: '카메라',
-                    state: _checkingDevices
-                        ? '확인 중...'
-                        : _cameraEnabled
-                        ? '정상 작동 중'
-                        : '꺼짐',
-                    enabled: _cameraEnabled,
-                    onTap: _toggleCamera,
-                  ),
-                  const SizedBox(height: 12),
-                  _DeviceCheckTile(
-                    icon: Icons.mic_none,
-                    title: '마이크',
-                    state: _checkingDevices
-                        ? '확인 중...'
-                        : _microphoneEnabled
-                        ? '입력 감지됨'
-                        : '꺼짐',
-                    enabled: _microphoneEnabled,
-                    onTap: _toggleMicrophone,
-                  ),
-                  const SizedBox(height: 12),
-                  _DeviceCheckTile(
-                    icon: Icons.volume_up_outlined,
-                    title: '스피커',
-                    state: '눌러서 소리를 테스트해보세요',
-                    enabled: true,
-                    onTap: () => SystemSound.play(SystemSoundType.click),
-                  ),
-                  const SizedBox(height: 12),
-                  _PharmacistRow(ready: !_checkingDevices),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 54,
-                    child: FilledButton.icon(
-                      onPressed: _enterConsultation,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: consultGreen,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      icon: const Icon(Icons.videocam_outlined),
-                      label: const Text('화상 상담 입장하기'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _CameraPreview extends StatelessWidget {
-  const _CameraPreview({
-    required this.cameraEnabled,
-    required this.microphoneEnabled,
-    required this.onToggleCamera,
-    required this.onToggleMicrophone,
-  });
-
-  final bool cameraEnabled;
-  final bool microphoneEnabled;
-  final VoidCallback onToggleCamera;
-  final VoidCallback onToggleMicrophone;
-
-  @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(24),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x24263C34),
-          blurRadius: 24,
-          offset: Offset(0, 10),
-        ),
-      ],
-    ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: SizedBox(
-        height: 300,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (cameraEnabled)
-              Image.asset(
-                'assets/figma/pharmacist_preview.png',
-                fit: BoxFit.cover,
-                alignment: const Alignment(0, -0.6),
-                semanticLabel: '상담 화면 미리보기',
-              )
-            else
-              const ColoredBox(
-                color: Color(0xFF2A3330),
-                child: Center(
-                  child: Icon(
-                    Icons.videocam_off_outlined,
-                    color: Color(0x80FFFFFF),
-                    size: 40,
-                  ),
-                ),
-              ),
-            Positioned(
-              left: 14,
-              top: 14,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xB81B1614),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.circle, color: _lightMint, size: 7),
-                    SizedBox(width: 6),
-                    Text(
-                      '상담 화면 미리보기',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Positioned(
-              right: 14,
-              top: 14,
-              child: _PreviewControl(
-                icon: Icons.cameraswitch_outlined,
-                label: '카메라 전환',
-                size: 36,
-                bordered: false,
-                onTap: () {},
-              ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 14,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _PreviewControl(
-                    icon: cameraEnabled
-                        ? Icons.videocam_outlined
-                        : Icons.videocam_off_outlined,
-                    label: cameraEnabled ? '카메라 끄기' : '카메라 켜기',
-                    onTap: onToggleCamera,
-                  ),
-                  const SizedBox(width: 12),
-                  _PreviewControl(
-                    icon: microphoneEnabled
-                        ? Icons.mic_none
-                        : Icons.mic_off_outlined,
-                    label: microphoneEnabled ? '마이크 끄기' : '마이크 켜기',
-                    onTap: onToggleMicrophone,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _PreviewControl extends StatelessWidget {
-  const _PreviewControl({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.size = 44,
-    this.bordered = true,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final double size;
-  final bool bordered;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: label,
-    child: Material(
-      color: const Color(0xB81B1614),
-      shape: CircleBorder(
-        side: bordered
-            ? const BorderSide(color: Color(0x29FFFFFF))
-            : BorderSide.none,
-      ),
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: Icon(icon, color: Colors.white, size: 20),
-        ),
-      ),
-    ),
-  );
-}
-
-class _ReadyMessage extends StatelessWidget {
-  const _ReadyMessage({required this.checking});
-
-  final bool checking;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-    decoration: BoxDecoration(
-      color: const Color(0x1ADDEEE8),
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: const Color(0x4D65D6A8)),
-    ),
-    child: Row(
-      children: [
-        Icon(
-          checking ? Icons.hourglass_top : Icons.check_circle_outline,
-          color: _lightMint,
-          size: 18,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            checking ? '카메라 권한을 확인하는 중이에요...' : '카메라와 마이크가 정상적으로 연결됐어요.',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _DeviceCheckTile extends StatelessWidget {
-  const _DeviceCheckTile({
-    required this.icon,
-    required this.title,
-    required this.state,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String state;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: const Color(0x0FFFFFFF),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(14),
-      side: const BorderSide(color: Color(0x1FFFFFFF)),
-    ),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: SizedBox(
-        height: 54,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 13),
-          child: Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: const Color(0x1AFFFFFF),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: Colors.white, size: 18),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      state,
-                      style: const TextStyle(
-                        color: Color(0x9EFFFFFF),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _MiniToggle(on: enabled),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-/// HTML의 `.device-status2` 작은 토글 (34×20).
-class _MiniToggle extends StatelessWidget {
-  const _MiniToggle({required this.on});
-
-  final bool on;
-
-  @override
-  Widget build(BuildContext context) => AnimatedContainer(
-    duration: const Duration(milliseconds: 150),
-    width: 34,
-    height: 20,
-    padding: const EdgeInsets.all(2),
-    alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-    decoration: BoxDecoration(
-      color: on ? consultGreen : _toggleOff,
-      borderRadius: BorderRadius.circular(999),
-    ),
-    child: Container(
-      width: 16,
-      height: 16,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-      ),
-    ),
-  );
-}
-
-class _PharmacistRow extends StatelessWidget {
-  const _PharmacistRow({required this.ready});
-
-  final bool ready;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Container(
-        width: 38,
-        height: 38,
-        decoration: const BoxDecoration(
-          color: consultMint,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(Icons.person_outline, color: consultGreen, size: 22),
-      ),
-      const SizedBox(width: 10),
-      const Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '약사 상담실',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            Text(
-              '약사가 입장하면 자동으로 연결돼요',
-              style: TextStyle(color: Color(0x9EFFFFFF), fontSize: 11),
-            ),
-          ],
-        ),
-      ),
-      _StatusChip(label: ready ? '연결 준비됨' : '준비 중'),
-    ],
   );
 }

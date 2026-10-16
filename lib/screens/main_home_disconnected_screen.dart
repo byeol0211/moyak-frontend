@@ -8,6 +8,25 @@ const _darkBrown = Color(0xFF3E2723);
 const _secondaryBrown = Color(0xFF8D7F79);
 const _brandYellow = Color(0xFFFFD54F);
 
+class _ScrollableHome extends StatelessWidget {
+  const _ScrollableHome({required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: SizedBox(
+          height: constraints.maxHeight.clamp(
+            700 * MediaQuery.textScalerOf(context).scale(1),
+            double.infinity,
+          ),
+          child: child,
+        ),
+      ),
+    ),
+  );
+}
+
 class MainHomeDisconnectedScreen extends StatelessWidget {
   const MainHomeDisconnectedScreen({
     required this.onScanQr,
@@ -31,7 +50,7 @@ class MainHomeDisconnectedScreen extends StatelessWidget {
     ),
     child: Container(
       color: _canvas,
-      child: SafeArea(
+      child: _ScrollableHome(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -67,18 +86,14 @@ class MainHomeConnectedScreen extends StatelessWidget {
   const MainHomeConnectedScreen({
     required this.machineName,
     required this.onScanQr,
-    required this.onOpenStore,
-    this.isLoadingStore = false,
+    this.paired = false,
     super.key,
   });
 
   /// 지도에서 고르거나 QR로 연결한 자판기 이름.
   final String machineName;
+  final bool paired;
   final VoidCallback onScanQr;
-
-  /// 자판기 재고를 조회한 뒤 스토어로 이동한다.
-  final VoidCallback onOpenStore;
-  final bool isLoadingStore;
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
@@ -91,7 +106,7 @@ class MainHomeConnectedScreen extends StatelessWidget {
     ),
     child: Container(
       color: _canvas,
-      child: SafeArea(
+      child: _ScrollableHome(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -109,8 +124,7 @@ class MainHomeConnectedScreen extends StatelessWidget {
                     Expanded(
                       child: _ConnectedCard(
                         machineName: machineName,
-                        onOpenStore: onOpenStore,
-                        isLoadingStore: isLoadingStore,
+                        paired: paired,
                       ),
                     ),
                   ],
@@ -340,15 +354,10 @@ class _DisconnectedCard extends StatelessWidget {
 }
 
 class _ConnectedCard extends StatelessWidget {
-  const _ConnectedCard({
-    required this.machineName,
-    required this.onOpenStore,
-    required this.isLoadingStore,
-  });
+  const _ConnectedCard({required this.machineName, required this.paired});
 
   final String machineName;
-  final VoidCallback onOpenStore;
-  final bool isLoadingStore;
+  final bool paired;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -379,7 +388,7 @@ class _ConnectedCard extends StatelessWidget {
               const Icon(Icons.circle, color: Color(0xFF20C878), size: 8),
               const SizedBox(width: 6),
               Text(
-                '$machineName 연동됨',
+                '$machineName ${paired ? '연동됨' : '선택됨'}',
                 style: const TextStyle(
                   color: Color(0xFF13B965),
                   fontSize: 12,
@@ -400,8 +409,8 @@ class _ConnectedCard extends StatelessWidget {
             ),
           ),
         ),
-        const Text(
-          '안전하게 연결되었습니다!',
+        Text(
+          paired ? '자판기 연결 화면입니다' : '이용할 자판기를 선택했어요',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: _darkBrown,
@@ -411,43 +420,9 @@ class _ConnectedCard extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         const Text(
-          '원하는 상비의약품을 자판기 스토어에서 직접 조회하고 간편하게 바로 구매해보세요.',
+          '재고는 지도에서 자판기를 눌러 확인할 수 있어요. 실제 연결은 QR 스캔으로, 구매와 결제는 자판기에서 진행합니다.',
           textAlign: TextAlign.center,
           style: TextStyle(color: _secondaryBrown, fontSize: 12, height: 1.35),
-        ),
-        const SizedBox(height: 20),
-        const Divider(height: 1, color: Color(0xFFF0ECE7)),
-        const SizedBox(height: 22),
-        SizedBox(
-          height: 50,
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: isLoadingStore ? null : onOpenStore,
-            icon: isLoadingStore
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.shopping_bag_outlined, size: 20),
-            label: Text(isLoadingStore ? '재고 조회 중...' : '상품 구매하기'),
-            style: FilledButton.styleFrom(
-              backgroundColor: _brandYellow,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: _brandYellow.withValues(alpha: 0.7),
-              disabledForegroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-              textStyle: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
         ),
       ],
     ),

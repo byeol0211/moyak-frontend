@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../widgets/consult_header.dart';
+import '../config/app_config.dart';
+import '../data/app_session.dart';
 
 /// 모약이 챗봇: 의약품 질문에 답하고, 답변마다 약사 상담으로 이어지는 버튼을 보여준다.
 class ChatPage extends StatefulWidget {
@@ -64,19 +66,31 @@ class _ChatPageState extends State<ChatPage> {
       _busy = true;
       _error = null;
       _messages.add(message);
+      _syncSummary();
       _messageController.clear();
     });
     _scrollToBottom();
     try {
-      const base = String.fromEnvironment('API_BASE_URL');
-      final uri = (base.isEmpty ? Uri.base : Uri.parse(base)).resolve('/chat');
-      final response = await _client
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'question': question, 'history': recent}),
-          )
-          .timeout(const Duration(seconds: 90));
+      final preview = AppConfig.preview.value && widget.client == null;
+      final response = preview
+          ? http.Response(
+              jsonEncode({
+                'answer': '**화면 미리보기 답변**\n입력한 질문을 확인했어요. 이 답변은 화면 확인용이며 의약품 안내나 진단이 아닙니다.\n- 실제 답변은 챗봇 서버 연결 후 제공됩니다.\n- 아래 버튼으로 약사 상담 화면을 확인할 수 있어요.',
+                'sources': <String>[],
+                'evidence': <Object>[],
+              }),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            )
+          : await _client
+                .post(
+                  widget.client != null && AppConfig.apiBaseUrl.isEmpty
+                      ? Uri(path: '/chat')
+                      : AppConfig.endpoint('/chat'),
+                  headers: {'Content-Type': 'application/json'},
+                  body: jsonEncode({'question': question, 'history': recent}),
+                )
+                .timeout(const Duration(seconds: 90));
       dynamic data;
       try {
         data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -101,11 +115,13 @@ class _ChatPageState extends State<ChatPage> {
           'evidence': data['evidence'],
           'complete': true,
         });
+        _syncSummary();
       });
     } catch (e) {
       if (mounted) {
         setState(() {
           _messages.remove(message);
+          _syncSummary();
           _error = '$e'.replaceFirst('Exception: ', '');
           _messageController.text = question;
         });
@@ -116,6 +132,16 @@ class _ChatPageState extends State<ChatPage> {
         _scrollToBottom();
       }
     }
+  }
+
+  void _syncSummary() {
+    AppSession.instance.chatSummary = _messages
+        .where((message) => message['complete'] == true)
+        .map(
+          (message) =>
+              '${message['role'] == 'user' ? '사용자' : '모약이'}: ${message['content']}',
+        )
+        .join('\n');
   }
 
   void _showEvidence(List<dynamic> evidence) => showModalBottomSheet<void>(

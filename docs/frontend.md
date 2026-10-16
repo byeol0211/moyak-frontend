@@ -1,18 +1,30 @@
 # 프론트엔드 구성
 
-모약 앱(Flutter)의 화면, 파일, 데이터 연동 현황을 정리한 문서입니다.
-화면 디자인의 기준은 백엔드 저장소(`moyak-backend`)의 `src/api/static/app/<화면>/` HTML/CSS입니다.
+모약 소비자 앱(Flutter)의 화면, 파일, 백엔드 연동 현황, 빌드 방법을 정리한 문서입니다.
+화면 디자인과 동작의 기준은 백엔드 저장소(`moyak-backend`)의 `src/api/static/app/<화면>/` HTML/CSS와
+[백엔드 Flutter 인수인계 문서](https://github.com/JONGBOK1/moyak-backend/blob/master/docs/flutter-handoff.md)입니다.
+
+- 화면별 확인 방법과 미리보기 기능: [frontend-progress.md](frontend-progress.md)
+- 화상 통화(Daily) 구현: [daily-integration.md](daily-integration.md)
+- 카카오 지도 키와 도메인: [map.md](map.md)
 
 ## 실행
 
 ```powershell
 flutter pub get
+
+# 실제 서버(Render)와 연결해서 실행
+flutter run --dart-define=API_BASE_URL=https://moyak-backend.onrender.com
+
+# 웹으로 화면만 볼 때 (카카오 지도 등록 주소가 5555 포트)
 flutter run -d chrome --web-port 5555
 ```
 
-- VS Code에서는 `.vscode/launch.json`의 **moyak (Chrome, 5555)** 를 실행하면 됩니다.
-- 카카오 지도는 Kakao Developers에 등록된 주소에서만 보입니다. 키와 도메인은 `lib/kakao_config.dart`에 있고, 자세한 내용은 [map.md](map.md)를 참고하세요.
-- 백엔드 API 주소는 `--dart-define=API_BASE_URL=http://127.0.0.1:8002`로 지정합니다. 생략하면 웹앱과 같은 출처로 요청합니다.
+- 로그인 화면에서 들어가는 방식이 두 가지입니다.
+  - **게스트로 계속하기**: 실제 서버로 동작합니다. 기기에 임시 사용자 ID(`moyak_user_id`)를 만들어 API에 씁니다.
+  - **회원가입 없이 화면 미리보기**: 서버 없이 예시 데이터로 모든 화면 흐름을 확인합니다.
+- `API_BASE_URL`이 없으면 웹에서는 같은 출처로, 앱에서는 서버 연결 안내를 보여줍니다.
+- Render 무료 서버는 한동안 안 쓰면 잠들어 첫 요청이 1분쯤 걸립니다. 상담 요청은 70초까지 기다립니다.
 - 검증: `flutter analyze`, `flutter test`
 
 ## 화면 흐름
@@ -26,141 +38,141 @@ flutter run -d chrome --web-port 5555
 
 | 탭 | 화면 | 비고 |
 |---|---|---|
-| 메인 | 연결 없음 홈 / 연결된 홈 | 자판기를 선택하거나 QR로 연결하면 연결된 홈으로 바뀝니다 |
-| 지도 | 내 주변 자판기 | 목록 → 재고 상세 → "이 자판기 선택" |
-| 상담하기 (가운데) | 약사 연결 대기 → 화상 상담 입장 | 탭에 들어올 때마다 새 상담 요청으로 시작합니다 |
-| 모약이 | 챗봇 | 답변의 "약사에게 바로 상담하기"는 상담 탭으로 이동합니다 |
-| 마이 | 마이페이지 | 내 상담 내역, 전자 구매 허가서, 재고 신청으로 이동합니다 |
-
-QR 스캔은 탭이 아니라 홈, 상담, 챗봇 헤더의 **QR 스캔** 버튼으로 엽니다.
+| 메인 | 연결 없음 홈 / 연결된 홈 | 지도에서 자판기를 선택하거나 QR로 연결하면 연결된 홈으로 바뀝니다 |
+| 지도 | 내 주변 자판기 | 목록과 검색 → 재고 상세 → "이 자판기 선택" |
+| 상담하기 (가운데) | 약사 연결 대기 → 화상 상담 입장 → 통화 | 진행 중인 상담은 탭을 옮겨도 유지됩니다 |
+| 모약이 | 챗봇 | 답변의 "약사에게 바로 상담하기"는 대화 내용을 약사에게 넘기며 상담을 요청합니다 |
+| 마이 | 마이페이지 | 내 상담 내역, 전자 구매 허가서, 로그아웃 |
 
 주요 이동 경로:
 
-- **구매:** 지도에서 자판기 선택 → 연결된 홈에 "OO 연동됨" 표시 → **상품 구매하기** → 그 자판기 재고 조회 → 스토어
-- **상담:** 가운데 "상담하기" → 연결 대기 → 화상방이 준비되면 입장 화면으로 자동 이동 → 입장하기 → 화상 상담 화면
-- **챗봇에서 상담:** "약사에게 바로 상담하기" → 연결 대기 화면에 머물며 입장 버튼 표시
-- **지난 상담:** 마이 → 내 상담 내역 → "자세히 보기" → 상담 결과(처방 완료, 거절) 화면
+- **자판기:** 지도 목록 또는 검색 → 자판기 상세(실제 재고) → 선택 → 홈에 "OO 선택됨" 표시
+- **바로 상담:** 가운데 "상담하기" → 상담 요청 → 화상방이 준비되면 입장 화면으로 자동 이동 → 통화
+- **챗봇에서 상담:** "약사에게 바로 상담하기" → 대기 화면에 머물며 입장 버튼 표시
+- **지난 상담:** 마이 → 내 상담 내역 → "자세히 보기" → 그 상담의 결과 화면
+
+홈의 "상품 구매하기"는 기획 변경으로 제거했습니다. 재고는 지도에서 확인하고, 구매와 결제는 자판기에서 합니다.
+스토어 화면(`store_page.dart`)은 나중에 다시 쓸 수 있도록 파일만 남아 있습니다.
+
+## 백엔드 연동 현황
+
+| 기능 | 상태 | API | 코드 |
+|---|---|---|---|
+| 챗봇 답변 | ✅ 연결 | `POST /chat` | `screens/chatbot_screen.dart` |
+| 지도 자판기 목록 | ✅ 연결 | `GET /api/v1/map/machines?lat&lng` | `screens/map_screen/map_screen.dart` |
+| 자판기 상세 재고 | ✅ 연결 | `GET /api/v1/map/machines/{id}` | `data/machine_api.dart` |
+| 상담 요청 (진행 중 상담 재사용) | ✅ 연결 | `GET /consultations?status=pending&user_id=` → `POST /consultations` | `data/consultation_api.dart` |
+| 상담 상태 갱신 (3초) | ✅ 연결 | `GET /consultations/{id}` | `screens/consultation_screen.dart` |
+| 약사 입장 알림 (3초) | ✅ 연결 | `GET /consultations/{id}/presence` | 〃 |
+| 상담 취소 | ✅ 연결 | `POST /consultations/{id}/cancel` | 〃 |
+| 화상 통화 입장 | ✅ 연결 (실제 통화 검증 전) | 상담 응답의 `room_url` → Daily | `calls/`, `video_consultation_page.dart` |
+| 통화 중 채팅, 상담 종료 | ✅ 연결 (실제 통화 검증 전) | `GET·POST /consultations/{id}/messages`, `POST .../end` | `calls/consultation_chat.dart` |
+| 내 상담 내역 | ✅ 연결 | `GET /consultations?user_id=` (취소 건 제외) | `data/consultation_api.dart` |
+| 전자 구매 허가서 | ✅ 연결 | `GET /vending/purchases?user_id=` | 〃 |
+| QR 스캔으로 자판기 연결 | ❌ 미연결 | `POST /vending/scan` | `QrCameraPage.onScan` (QR 인식·형식 검사까지만 구현) |
+| 통화 녹음·약사 검토 요약 | ❌ 미연결 | `/consultations/{cid}/session`, `/audio`, `/summary` | 없음 |
+| 로그인·회원가입 | ❌ 서버 API 없음 | — | 화면만 있음 |
+
+공통 규칙 (`data/api_client.dart`):
+
+- 서버 오류는 `{"detail": "한국어 메시지"}`로 오며, 그 메시지를 화면에 그대로 보여줍니다.
+- 서버 시간은 UTC이고 끝에 `Z`가 없어서 `parseServerTime`으로 기기 시간으로 바꿉니다.
+- 미리보기 모드에서는 `data/demo_data.dart`의 예시 데이터를 씁니다.
 
 ## 폴더 구조
 
 ```
 lib/
-├─ main.dart                 앱 진입점, 라우팅, AppShell(탭), 마이페이지, 재고 신청, 스토어
-├─ kakao_config.dart         카카오 지도 JavaScript 키와 사이트 도메인
+├─ main.dart                  앱 진입점, 라우팅, AppShell(탭, 상담 세션, 하위 화면 이동)
+├─ kakao_config.dart          카카오 지도 JavaScript 키와 사이트 도메인
+├─ config/app_config.dart     미리보기 모드, API 주소(API_BASE_URL)
+├─ theme/app_theme.dart       앱 공통 색
 ├─ data/
-│  ├─ models.dart            화면에서 쓰는 데이터 모델
-│  └─ demo_data.dart         백엔드 연동 전 데모 데이터 (연동할 때 이 파일만 바꿉니다)
-├─ utils/
-│  └─ format.dart            날짜(2025.01.15), 시각(오후 2:18), 금액(3,000원) 표기
-├─ widgets/
-│  ├─ app_status_bar.dart    상단 상태 표시줄(9:41, 신호, 배터리)
-│  ├─ consult_header.dart    상담·챗봇 공통: 초록 팔레트, 크림색 헤더, QR 버튼, 상담 요약 본문
-│  └─ sub_page_scaffold.dart 마이페이지 하위 화면 공통 틀(뒤로가기와 가운데 제목, 빈 목록 안내)
+│  ├─ models.dart             화면 데이터 모델 (자판기, 재고, 상담, 허가서)
+│  ├─ api_client.dart         JSON API 공통 처리, 서버 시간 변환
+│  ├─ machine_api.dart        자판기 재고 API
+│  ├─ consultation_api.dart   상담·상담 내역·허가서 API
+│  ├─ app_session.dart        사용자 ID, 현재 상담, 화상방 정보, 챗봇 대화 요약
+│  ├─ machine_qr.dart         자판기 QR 내용 검사 ({"machine_id", "qr_token"})
+│  └─ demo_data.dart          미리보기용 예시 데이터
+├─ calls/                     Daily 화상 통화 엔진(모바일)·웹 대체, 통화 중 채팅 클라이언트
+├─ utils/                     날짜·금액 표기, 입력 검증
+├─ widgets/                   하단 메뉴, 상담 헤더, 하위 화면 틀, 카메라 미리보기, 공통 버튼 등
 └─ screens/
-   ├─ login_page.dart
-   ├─ signup_step1_screen.dart / signup_step2_screen.dart / signup_step3_screen.dart
-   ├─ onboarding_1_screen.dart ~ onboarding_4_screen.dart
-   ├─ screen_flows.dart       회원가입, 온보딩 단계 묶음
-   ├─ permission_screen.dart
+   ├─ login_page.dart, signup_step1~3_screen.dart, screen_flows.dart
+   ├─ onboarding_1~4_screen.dart, permission_screen.dart
    ├─ main_home_disconnected_screen.dart   연결 없음 / 연결된 홈
-   ├─ map_screen/map_screen.dart
-   ├─ qr_camera_page.dart
-   ├─ consultation_screen.dart              약사 연결 대기 + 화상 상담 입장
-   ├─ video_consultation_page.dart          화상 상담 중 화면
-   ├─ chatbot_screen.dart
+   ├─ map_screen/map_screen.dart            지도, 목록, 검색, 재고 상세
+   ├─ qr_camera_page.dart                   QR 스캔
+   ├─ consultation_screen.dart              약사 연결 대기 (실제/미리보기/지난 상담 보기)
+   ├─ consultation_entry_page.dart          화상 상담 입장 전 기기 확인
+   ├─ video_consultation_page.dart          화상 통화와 채팅
+   ├─ chatbot_screen.dart                   모약이 챗봇
    ├─ consult_history_screen.dart           내 상담 내역
-   └─ permit_list_screen.dart               전자 구매 허가서
-
-assets/figma/                Figma에서 내보낸 이미지와 아이콘
-test/                        위젯 테스트
+   ├─ permit_list_screen.dart               전자 구매 허가서
+   ├─ mypage.dart                           마이페이지
+   ├─ store_page.dart                       (현재 미사용) 자판기 스토어
+   └─ inventory_request_page.dart           (현재 미사용) 재고 신청
 ```
 
-## 파일별 설명
+## 화면별 메모
 
-### 앱 뼈대
+**지도** (`map_screen.dart`)
+- 내 위치 버튼으로 현재 위치를 받아 거리순으로 정렬합니다. 위치를 못 받으면 기본 위치 기준입니다.
+- 검색은 거리와 관계없이 서버가 준 **전체 자판기**에서 이름·주소·자판기 코드를 대상으로, 띄어쓰기와 대소문자를 무시하고 찾습니다. 서버가 한 번에 주는 자판기는 최대 500곳입니다.
 
-| 파일 | 주요 클래스 | 설명 |
+**약사 상담** (`consultation_screen.dart`)
+- 실제 모드: 상담 요청 → 3초마다 상태·약사 입장 확인 → 승인(처방약 표시)·거절(사유)·종료(요약) 반영. 상담이 종료되거나 취소되면 확인을 멈춥니다.
+- 하단 "상담하기"로 들어오면(`direct`) 대화 요약 없이 요청하고, 화상방이 준비되면 바로 입장 화면으로 갑니다.
+- 챗봇에서 들어오면 지금까지의 대화를 `사용자: … / 모약이: …` 형식으로 약사에게 전달합니다.
+- 요청에 실패하면 서버 메시지와 "다시 요청하기" 버튼을 보여줍니다.
+- 미리보기 모드: 상단의 "예시 상담 상태"로 대기·승인·거절 화면을 확인합니다.
+
+## Android 빌드 (Windows)
+
+이 PC 기준으로 정리한 환경입니다. 다른 PC도 같은 문제를 피하려면 아래를 맞춰 주세요.
+
+| 항목 | 설정 | 이유 |
 |---|---|---|
-| `main.dart` | `MoyakApp`, `SplashPage` | 테마, 스플래시(0.9초) 이후 권한 안내 → 로그인으로 이동 |
-| `main.dart` | `AppShell` | 탭 전환, 연결된 자판기 상태, QR 스캔 열기, 재고 조회 후 스토어 열기, 상담 세션 관리 |
-| `main.dart` | `AppBottomNavigation` | 하단 메뉴(메인/지도/상담하기/모약이/마이). 마이페이지 하위 화면에서도 같은 메뉴를 씁니다 |
-| `screens/screen_flows.dart` | `SignupFlow`, `OnboardingFlow` | 회원가입 3단계와 온보딩 4장을 한 화면 안에서 넘깁니다 |
+| Android SDK | `E:\AndroidSdk` (공백 없는 경로) | SDK 경로에 공백이 있으면 NDK 빌드가 실패할 수 있음 |
+| NDK | `30.0.15729638` | `daily_flutter` 0.40.0이 요구 |
+| Flutter 패키지 캐시 `PUB_CACHE` | 프로젝트와 **같은 드라이브** (예: `E:\flutter-pub-cache`) | 다른 드라이브면 Kotlin 증분 빌드가 "different roots" 오류로 실패 |
+| Gradle 캐시 `GRADLE_USER_HOME` | `E:\Android\.gradle` | C 드라이브 용량 절약 (첫 빌드 후 수 GB) |
+| 플러그인 compileSdk | `android/build.gradle.kts`에서 36 미만이면 36으로 맞춤 | `daily_flutter`가 35로 고정돼 있어 다른 플러그인 요구(36)와 충돌 |
 
-### 화면
+```powershell
+# 폰을 USB로 연결(USB 디버깅 허용)한 뒤
+flutter run --dart-define=API_BASE_URL=https://moyak-backend.onrender.com
 
-| 파일 | 클래스 | HTML 기준 | 설명 |
-|---|---|---|---|
-| `screens/permission_screen.dart` | `PermissionScreen` | 없음(앱 전용) | 카메라, 위치, 마이크 권한 안내 |
-| `screens/login_page.dart` | `LoginPage` | `login` | 아이디/비밀번호, SNS 로그인 버튼 |
-| `screens/signup_step1~3_screen.dart` | `SignupStep1~3Screen` | `signup-step1~3` | 아이디 중복확인 → 비밀번호 → 인증 방식 선택 |
-| `screens/onboarding_1~4_screen.dart` | `Onboarding1~4Screen` | `onboarding-1~4` | 공용 레이아웃은 `onboarding_2_screen.dart`의 `OnboardingPage` |
-| `screens/main_home_disconnected_screen.dart` | `MainHomeDisconnectedScreen` | `main-home-disconnected` | 기기 재탐색, QR 스캔 |
-| 〃 | `MainHomeConnectedScreen` | `main-home-connected` | 선택한 자판기 이름, 상품 구매하기(재고 조회 중 로딩 표시) |
-| `screens/map_screen/map_screen.dart` | `MapScreen` | `map-screen` | 카카오 지도 번호 핀, 가까운 자판기 목록(거리, 운영시간, 재고 배지), 재고 상세, 선택/선택 해제 |
-| `screens/qr_camera_page.dart` | `QrCameraPage` | `qr-camera` | QR 스캔 화면(현재는 가짜 QR을 누르면 생체 인증 후 연결) |
-| `screens/consultation_screen.dart` | `ConsultationScreen` | `pharmacist-waiting`, `video-consult-entry` | 연결 대기(경과 시간, 진행 단계, 입장 버튼, 상담 요약, 결과 상태)와 입장 전 기기 확인 |
-| `screens/video_consultation_page.dart` | `VideoConsultationPage` | 없음 | 화상 상담 중 화면(이미지 기반 시안) |
-| `screens/chatbot_screen.dart` | `ChatPage` | `chatbot` | 질문, 서식 있는 답변 카드, 원문 근거 시트, 약사 상담 버튼 |
-| `screens/consult_history_screen.dart` | `ConsultHistoryScreen` | `consult-history` | 상담 상태, 처방약/거절 사유, 펼쳐 보는 상담 요약 |
-| `screens/permit_list_screen.dart` | `PermitListScreen` | `permit-list` | 허가서 상태(사용 가능/기간 만료/수령 완료/취소됨), 유효기간, 발급 약사 |
-| `main.dart` | `Mypage` | `mypage` | 프로필, 결제 수단, 허가서/재고 신청 카드, 메뉴 |
-| `main.dart` | `InventoryRequestPage` | 없음 | 없는 약품 재고 신청 |
-| `main.dart` | `StorePage` | 없음(키오스크 `otc-list`와 유사) | 넘겨받은 자판기 재고로 상품 카드 표시, 품절과 의약품 잠금 표시 |
+# 설치 파일 만들기 (디버그 APK 약 240MB)
+flutter build apk --debug --dart-define=API_BASE_URL=https://moyak-backend.onrender.com
 
-`ConsultationScreen`은 들어온 방식에 따라 다르게 동작합니다.
+# 배포용 (폰 종류별로 나뉘어 용량이 작음)
+flutter build apk --release --split-per-abi --dart-define=API_BASE_URL=https://moyak-backend.onrender.com
+```
 
-- `direct: true`(가운데 "상담하기"): 화상방이 준비되면 입장 화면으로 자동 이동합니다.
-- `direct: false`(챗봇에서 이동): 대기 화면에 머물며 입장 버튼을 보여줍니다.
-- `record:`를 넘기면(상담 내역): 그 상담의 결과 상태를 보여줍니다.
-
-## 데이터와 백엔드 연동 현황
-
-| 기능 | 현재 | 연동할 API |
-|---|---|---|
-| 챗봇 답변 | **실제 API** (`chatbot_screen.dart`) | `POST /chat` |
-| 지도 자판기 목록 | **실제 API** (`map_screen.dart`) | `GET /api/v1/map/machines` |
-| 자판기 재고 | 데모 `fetchMachineStock` | `GET /api/v1/map/machines/{id}` |
-| 내 상담 내역 | 데모 `fetchConsultHistory` | `GET /consultations?user_id=` |
-| 전자 구매 허가서 | 데모 `fetchPermits` | `GET /vending/purchases?user_id=` |
-| 상담 요청, 대기, 취소 | 화면 안에서 시간차로 흉내(화상방 준비 3초, 약사 입장 8초) | `POST /consultations`, `GET /consultations/{id}`(3초 폴링), `POST /consultations/{id}/cancel` |
-| 화상 상담 | 정지 이미지 미리보기, 가짜 통화 화면 | 서버가 내려주는 Daily.co `room_url` |
-| QR 연결 | 가짜 QR, 데모 자판기(`demoConnectedMachine`)로 연결 | `POST /vending/scan` |
-| 로그인, 회원가입 | 시연 동작 | 백엔드 HTML도 아직 API 없음 |
-
-연동 방법:
-
-1. `lib/data/demo_data.dart`의 함수 본문을 API 호출로 바꿉니다. 함수 이름과 반환 타입은 그대로 둡니다.
-2. 모델(`lib/data/models.dart`)의 필드 이름은 백엔드 JSON에 맞춰 두었습니다. 응답 변환은 `VendingMachine.fromJson`처럼 `fromJson`을 추가합니다.
-3. 백엔드 HTML은 요청 헤더로 사용자 ID(`X-Moyak-User-Id`)를 보냅니다. 앱에는 아직 사용자 ID 저장이 없어 함께 만들어야 합니다.
-
-## 디자인 기준
-
-화면마다 백엔드 HTML의 색을 그대로 씁니다.
-
-| 영역 | 주요 색 |
-|---|---|
-| 상담, 챗봇 | 초록 `#176B5B`, 진초록 `#105348`, 민트 `#DDEEE8`, 크림 배경 `#F6F2E9`, 글자 `#342521` / `#776A64` (`widgets/consult_header.dart`에 상수로 정의) |
-| 화상 상담 입장 | 헤더 `#1F2624`, 본문 `#18201E`, 강조 `#65D6A8` |
-| 지도 | 배경 `#F2EBDD`, 노랑 `#FFD54F`, 글자 `#3E2723` / `#7D6D6A` |
-| 상담 내역, 허가서 | 배경 `#F5F5F3`, 글자 `#3E2723` / `#7D6D6A` (`widgets/sub_page_scaffold.dart`) |
-| 그 외 앱 공통 | `main.dart`의 `brandYellow #F1C744`, `ink #252525`, `mutedInk #8C8B82` |
-
-화면 크기 기준은 Figma 프레임 402×874입니다.
+- 빌드 결과: `build/app/outputs/flutter-apk/`
+- 현재 디버그 서명과 패키지 이름 `com.example.moyak`를 씁니다. Play 스토어에 올리려면 업로드 키와 패키지 이름 변경이 필요합니다.
+- 빌드가 실패한 뒤 "already registered" 같은 Kotlin 캐시 오류가 나면 `flutter clean` 후 다시 빌드합니다.
 
 ## 테스트
 
 | 파일 | 내용 |
 |---|---|
-| `test/widget_test.dart` | 스플래시 → 권한 → 로그인 화면 진입 |
+| `test/widget_test.dart` | 스플래시 → 권한 → 로그인 진입 |
 | `test/chatbot_test.dart` | 챗봇 질문 전송, 대화 기록 전달, 서버 오류 표시 |
-| `test/screens_smoke_test.dart` | 402×874 크기에서 상담 흐름, 취소 확인, 상담 내역, 허가서, 챗봇 답변 카드, 지도 목록·재고·선택, 스토어 |
+| `test/screens_smoke_test.dart` | 402×874 화면에서 상담 미리보기, 상담 내역, 허가서, 챗봇, 지도 목록·검색·실제 재고 API, 스토어 |
+| `test/consultation_live_test.dart` | 실제 상담 API 흐름(가짜 서버): 요청·대화 전달, 진행 중 상담 재사용, 약사 입장·승인 반영, 취소, 오류 후 재시도, 상담 내역·허가서 변환 |
+| `test/frontend_flow_test.dart` | 입력 검증, QR 형식, 사용자 ID, 작은 화면과 키보드 배치 |
+| `test/daily_call_test.dart` | 화상 통화 제어·재시도·채팅·종료 (가짜 통화 엔진) |
 
-## 남은 과제와 주의사항
+## 남은 과제
 
-- **목록과 상세 재고가 다를 수 있습니다.** 지도 목록의 재고 배지는 실제 API 값이고 상세 재고는 데모 데이터입니다.
-- **거리는 기본 위치 기준입니다.** 위치 권한(geolocation) 연동이 없습니다.
-- **'길찾기' 링크가 없습니다.** 외부 링크를 열려면 `url_launcher` 패키지 추가가 필요합니다.
-- **카카오 지도 모서리:** 웹에서는 지도 박스의 둥근 모서리가 적용되지 않을 수 있습니다.
-- **하단 메뉴 이름:** 백엔드 HTML 안에서도 "홈/주변약국/챗봇/내정보"와 "메인/지도/모약이/마이"가 섞여 있습니다. 앱은 후자를 씁니다.
-- **QR 화면 하단 버튼:** HTML은 손전등인데 앱은 마이크 토글입니다.
-- **[map.md](map.md)는 일부 예전 내용입니다.** 검색창과 "재고 상품보기" 설명은 지금 지도 화면과 다릅니다.
+- **실제 화상 통화 검증:** 폰 앱과 약사 웹(`/pharmacist`)으로 같은 상담에 입장해 영상·음성·채팅·종료를 확인해야 합니다.
+- **QR 연결:** `QrCameraPage.onScan`에서 `POST /vending/scan`을 호출하고, 성공했을 때만 홈을 "연동됨"으로 바꿉니다.
+- **통화 녹음·약사 검토 요약** 연동
+- **카메라 미리보기 오류:** 권한 창이 뜰 때 카메라를 끄면서 처리되지 않은 오류가 로그에 남고, 권한 허용 직후 미리보기가 꺼진 상태로 보입니다(다시 누르면 켜짐). `widgets/device_camera_preview.dart`
+- **화면 배치 다듬기:** 실제 기기(갤럭시 S23)에서 조정이 필요한 부분이 있습니다.
+- **카카오 지도 키:** 앱의 키와 서버(`/api/v1/map/config`)의 키가 서로 다릅니다. 하나로 통일하는 것이 좋습니다.
+- **지도 '길찾기' 링크:** 외부 링크를 열려면 `url_launcher` 패키지가 필요합니다.
+- **[map.md](map.md)** 는 예전 지도 화면 기준이라 일부 내용이 다릅니다.

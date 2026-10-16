@@ -3,6 +3,14 @@
 library;
 
 import 'models.dart';
+import '../config/app_config.dart';
+import 'app_session.dart';
+
+void _requirePreview() {
+  if (!AppConfig.preview.value) {
+    throw StateError('서버 연결을 준비 중이에요. 화면 미리보기에서 예시 데이터를 확인할 수 있어요.');
+  }
+}
 
 const _demoLatency = Duration(milliseconds: 500);
 
@@ -29,7 +37,9 @@ const _demoStock = [
 
 /// 자판기 재고 조회. 연동 시: `GET /api/v1/map/machines/{id}` 의 items.
 Future<List<StockItem>> fetchMachineStock(String machineId) async {
+  _requirePreview();
   await Future<void>.delayed(_demoLatency);
+  if (machineId == 'preview-empty') return [];
   // 자판기마다 재고가 조금씩 다르게 보이도록 id로 품절 품목을 정한다.
   final soldOutIndex = machineId.hashCode.abs() % _demoStock.length;
   return [
@@ -47,9 +57,11 @@ Future<List<StockItem>> fetchMachineStock(String machineId) async {
 
 /// 내 상담 내역. 연동 시: `GET /consultations?user_id=` (취소 건 제외).
 Future<List<ConsultRecord>> fetchConsultHistory() async {
+  _requirePreview();
   await Future<void>.delayed(_demoLatency);
   final now = DateTime.now();
   return [
+    ...AppSession.instance.history,
     ConsultRecord(
       id: 'demo-consult-3',
       createdAt: now.subtract(const Duration(hours: 2)),
@@ -82,13 +94,16 @@ Future<List<ConsultRecord>> fetchConsultHistory() async {
 
 /// 전자 구매 허가서 목록. 연동 시: `GET /vending/purchases?user_id=`.
 Future<List<PermitRecord>> fetchPermits() async {
+  _requirePreview();
   await Future<void>.delayed(_demoLatency);
+  final now = DateTime.now();
   return [
+    ...AppSession.instance.permits,
     PermitRecord(
       drugName: '타이레놀정 500mg',
       status: PermitStatus.available,
-      issuedAt: DateTime(2025, 1, 15),
-      expiresAt: DateTime(2025, 7, 15),
+      issuedAt: now.subtract(const Duration(days: 1)),
+      expiresAt: now.add(const Duration(days: 1)),
       pharmacist: '김민지 약사',
     ),
     PermitRecord(

@@ -4,44 +4,88 @@ import '../data/demo_data.dart';
 import '../data/models.dart';
 import '../utils/format.dart';
 import '../widgets/sub_page_scaffold.dart';
+import '../config/app_config.dart';
+import '../widgets/preview_list_controls.dart';
 
 /// 전자 구매 허가서 목록: 약사 상담으로 발급받은 허가서와 사용 상태.
 class PermitListScreen extends StatefulWidget {
-  const PermitListScreen({this.bottomNavigationBar, super.key});
+  const PermitListScreen({
+    this.bottomNavigationBar,
+    this.loadRecords,
+    super.key,
+  });
 
   final Widget? bottomNavigationBar;
+  final Future<List<PermitRecord>> Function()? loadRecords;
 
   @override
   State<PermitListScreen> createState() => _PermitListScreenState();
 }
 
 class _PermitListScreenState extends State<PermitListScreen> {
-  late final Future<List<PermitRecord>> _permits = fetchPermits();
+  PreviewListState _previewState = PreviewListState.populated;
+  late Future<List<PermitRecord>> _permits = _load();
+  Future<List<PermitRecord>> _load() async {
+    if (AppConfig.preview.value &&
+        _previewState != PreviewListState.populated) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (_previewState == PreviewListState.error) {
+        throw StateError('조회 실패 미리보기');
+      }
+      return [];
+    }
+    return (widget.loadRecords ?? fetchPermits)();
+  }
 
   @override
   Widget build(BuildContext context) => SubPageScaffold(
     title: '전자 구매 허가서',
     bottomNavigationBar: widget.bottomNavigationBar,
-    child: FutureBuilder<List<PermitRecord>>(
-      future: _permits,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return SubPageMessage('오류: ${snapshot.error}', error: true);
-        }
-        final permits = snapshot.data;
-        if (permits == null) return const SubPageMessage('불러오는 중...');
-        if (permits.isEmpty) {
-          return const SubPageMessage(
-            '아직 발급된 전자 구매 허가서가 없습니다.\n약사 상담을 통해 승인을 받으면 여기에 표시돼요.',
-          );
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.all(20),
-          itemCount: permits.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 16),
-          itemBuilder: (context, index) => _PermitCard(permit: permits[index]),
-        );
-      },
+    child: Column(
+      children: [
+        if (AppConfig.preview.value)
+          PreviewListControls(
+            value: _previewState,
+            onChanged: (value) => setState(() {
+              _previewState = value;
+              _permits = _load();
+            }),
+          ),
+        Expanded(
+          child: FutureBuilder<List<PermitRecord>>(
+            future: _permits,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Column(
+                  children: [
+                    const SubPageMessage('구매 허가서를 불러오지 못했어요.', error: true),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _permits = _load();
+                      }),
+                      child: const Text('다시 시도'),
+                    ),
+                  ],
+                );
+              }
+              final permits = snapshot.data;
+              if (permits == null) return const SubPageMessage('불러오는 중...');
+              if (permits.isEmpty) {
+                return const SubPageMessage(
+                  '아직 발급된 전자 구매 허가서가 없습니다.\n약사 상담을 통해 승인을 받으면 여기에 표시돼요.',
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.all(20),
+                itemCount: permits.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 16),
+                itemBuilder: (context, index) =>
+                    _PermitCard(permit: permits[index]),
+              );
+            },
+          ),
+        ),
+      ],
     ),
   );
 }

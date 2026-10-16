@@ -1,291 +1,174 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
-import '../widgets/app_status_bar.dart';
-
-const _scanLineColor = Color(0xFFFFD54F);
-const _qrModuleColor = Color(0xFFD9E4E8);
+import '../config/app_config.dart';
+import '../data/machine_qr.dart';
 
 class QrCameraPage extends StatefulWidget {
-  const QrCameraPage({this.onBack, this.onConnected, super.key});
-
+  const QrCameraPage({this.onBack, this.onConnected, this.onScan, super.key});
   final VoidCallback? onBack;
   final VoidCallback? onConnected;
-
+  final Future<void> Function(MachineQr)? onScan;
   @override
   State<QrCameraPage> createState() => _QrCameraPageState();
 }
 
-class _QrCameraPageState extends State<QrCameraPage> {
-  bool _muted = true;
-
-  Future<void> _verifyScannedCode() async {
-    final authenticated = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: const Color(0xB83E2723),
-      builder: (dialogContext) => _QrBiometricDialog(
-        onCancel: () => Navigator.of(dialogContext).pop(false),
-        onAuthenticate: () => Navigator.of(dialogContext).pop(true),
-      ),
-    );
-    if (authenticated == true && mounted) widget.onConnected?.call();
+class _QrCameraPageState extends State<QrCameraPage>
+    with WidgetsBindingObserver {
+  final _controller = MobileScannerController(
+    autoStart: false,
+    formats: [BarcodeFormat.qrCode],
+  );
+  bool _started = false;
+  bool _busy = false;
+  String? _message;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
-  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: const SystemUiOverlayStyle(
-      statusBarColor: Colors.black,
-      statusBarIconBrightness: Brightness.light,
-      statusBarBrightness: Brightness.dark,
-      systemNavigationBarColor: Colors.black,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ),
-    child: Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const AppStatusBar(color: Colors.white),
-            SizedBox(
-              height: 48,
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed:
-                        widget.onBack ?? () => Navigator.of(context).maybePop(),
-                    icon: const Icon(
-                      Icons.chevron_left,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const Expanded(
-                    child: Text(
-                      'QR 스캔',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 48),
-                ],
-              ),
-            ),
-            const SizedBox(height: 22),
-            const Text(
-              'QR 코드를 스캔하세요',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '자판기 화면의 QR 코드를 비추면 연동됩니다',
-              style: TextStyle(color: Color(0xFFBDBDBD), fontSize: 11),
-            ),
-            const SizedBox(height: 34),
-            _QrCameraGuide(onTap: _verifyScannedCode),
-            const Spacer(),
-            IconButton.filled(
-              onPressed: () => setState(() => _muted = !_muted),
-              style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFF252525),
-                foregroundColor: Colors.white,
-                fixedSize: const Size(38, 38),
-              ),
-              icon: Icon(
-                _muted ? Icons.mic_off_outlined : Icons.mic_none,
-                size: 18,
-              ),
-              tooltip: _muted ? '마이크 켜기' : '마이크 끄기',
-            ),
-            const SizedBox(height: 28),
-          ],
-        ),
-      ),
-    ),
-  );
-}
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_started || _busy) return;
+    if (state == AppLifecycleState.resumed) {
+      _start();
+    } else if (state == AppLifecycleState.inactive) {
+      _controller.stop();
+    }
+  }
 
-class _QrCameraGuide extends StatelessWidget {
-  const _QrCameraGuide({required this.onTap});
+  Future<void> _start() async {
+    if (!_started) {
+      setState(() => _started = true);
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    try {
+      await _controller.start();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _message = '카메라를 열지 못했어요. 권한과 다른 앱의 카메라 사용 여부를 확인해주세요.');
+      }
+    }
+  }
 
-  final VoidCallback onTap;
+  Future<void> _detected(BarcodeCapture capture) async {
+    if (_busy || capture.barcodes.isEmpty) return;
+    final raw = capture.barcodes.first.rawValue;
+    if (raw == null) return;
+    setState(() => _busy = true);
+    try {
+      final qr = MachineQr.parse(raw);
+      await _controller.stop();
+      if (widget.onScan != null) {
+        await widget.onScan!(qr);
+        if (mounted) widget.onConnected?.call();
+      } else if (mounted) {
+        setState(
+          () => _message = '자판기 QR을 인식했어요. 실제 기기 연결은 서버 연동 후 이용할 수 있어요.',
+        );
+      }
+    } on FormatException catch (error) {
+      if (mounted) setState(() => _message = error.message);
+    } catch (_) {
+      if (mounted) setState(() => _message = '연결하지 못했어요. QR을 다시 스캔해주세요.');
+    }
+  }
+
+  Future<void> _retry() async {
+    setState(() {
+      _busy = false;
+      _message = null;
+    });
+    await _start();
+  }
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      width: 224,
-      height: 224,
-      decoration: BoxDecoration(
-        color: const Color(0xFF111820),
-        border: Border.all(color: Colors.white, width: 2),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: const Color(0xFF18201E),
+    appBar: AppBar(
+      title: const Text('QR 스캔'),
+      leading: BackButton(onPressed: widget.onBack),
+    ),
+    body: SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.all(24),
         children: [
-          const CustomPaint(painter: _QrPatternPainter()),
-          Align(
-            alignment: const Alignment(0, -0.05),
-            child: Container(
-              width: 144,
-              height: 144,
-              decoration: BoxDecoration(
-                border: Border.all(color: _qrModuleColor, width: 2),
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: const CustomPaint(painter: _QrPatternPainter()),
+          const Text(
+            '자판기 화면의 QR 코드를 비춰주세요',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white, fontSize: 18),
+          ),
+          const SizedBox(height: 24),
+          AspectRatio(
+            aspectRatio: 1,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: _started
+                  ? MobileScanner(
+                      controller: _controller,
+                      onDetect: _detected,
+                      errorBuilder: (context, error) => Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            error.errorCode ==
+                                    MobileScannerErrorCode.permissionDenied
+                                ? '카메라 권한이 필요해요. 기기 설정에서 허용한 뒤 다시 시도해주세요.'
+                                : '이 기기에서 카메라를 사용할 수 없어요.',
+                            style: const TextStyle(color: Colors.white),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    )
+                  : const ColoredBox(
+                      color: Color(0xFF2A3330),
+                      child: Icon(
+                        Icons.qr_code_scanner,
+                        color: Colors.white54,
+                        size: 96,
+                      ),
+                    ),
             ),
           ),
-          Align(
-            alignment: const Alignment(0, -0.05),
-            child: Container(
-              height: 1,
-              color: _scanLineColor,
-              margin: const EdgeInsets.symmetric(horizontal: 4),
+          const SizedBox(height: 20),
+          if (_message != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(
+                _message!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
+          FilledButton.icon(
+            onPressed: _retry,
+            icon: Icon(_started ? Icons.refresh : Icons.camera_alt_outlined),
+            label: Text(_started ? '다시 스캔' : '카메라 켜기'),
+          ),
+          if (AppConfig.preview.value) ...[
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: widget.onConnected,
+              child: const Text('예시 자판기 연결 화면 보기'),
+            ),
+          ],
+          const SizedBox(height: 12),
+          const Text(
+            '카메라는 QR 인식에만 사용합니다. QR의 유효성과 실제 연결은 서버에서 확인합니다.',
+            style: TextStyle(color: Colors.white60),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
     ),
   );
-}
-
-class _QrBiometricDialog extends StatelessWidget {
-  const _QrBiometricDialog({
-    required this.onCancel,
-    required this.onAuthenticate,
-  });
-
-  final VoidCallback onCancel;
-  final VoidCallback onAuthenticate;
-
-  @override
-  Widget build(BuildContext context) => Dialog(
-    backgroundColor: Colors.white,
-    insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 320),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            InkWell(
-              onTap: onAuthenticate,
-              borderRadius: BorderRadius.circular(24),
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFFBE5),
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: const Icon(
-                  Icons.fingerprint,
-                  color: Color(0xFFFFD54F),
-                  size: 26,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              '생체 인증이 필요합니다',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF3E2723),
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 5),
-            const Text(
-              '기기에 등록된 지문을 인식해주세요',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF8D7F79), fontSize: 11),
-            ),
-            const SizedBox(height: 14),
-            const Divider(height: 1, color: Color(0xFFF0ECE9)),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 40,
-              width: double.infinity,
-              child: TextButton(
-                onPressed: onCancel,
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF8D7F79),
-                  backgroundColor: const Color(0xFFF4F4F3),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                child: const Text('취소'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _QrPatternPainter extends CustomPainter {
-  const _QrPatternPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const count = 29;
-    final cell = size.width / count;
-    final paint = Paint()..color = _qrModuleColor;
-
-    bool inFinder(int x, int y, int left, int top) =>
-        x >= left && x < left + 7 && y >= top && y < top + 7;
-
-    bool finderModule(int x, int y, int left, int top) {
-      final dx = x - left;
-      final dy = y - top;
-      return dx == 0 || dx == 6 || dy == 0 || dy == 6 ||
-          (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4);
-    }
-
-    for (var y = 0; y < count; y++) {
-      for (var x = 0; x < count; x++) {
-        final topLeft = inFinder(x, y, 1, 1);
-        final topRight = inFinder(x, y, count - 8, 1);
-        final bottomLeft = inFinder(x, y, 1, count - 8);
-        final dark = topLeft
-            ? finderModule(x, y, 1, 1)
-            : topRight
-            ? finderModule(x, y, count - 8, 1)
-            : bottomLeft
-            ? finderModule(x, y, 1, count - 8)
-            : (x * 17 + y * 29 + x * y * 3) % 11 < 5;
-
-        if (dark) {
-          canvas.drawRect(
-            Rect.fromLTWH(x * cell, y * cell, cell * 0.88, cell * 0.88),
-            paint,
-          );
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _QrPatternPainter oldDelegate) => false;
 }

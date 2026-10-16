@@ -7,7 +7,6 @@ const _brandYellow = Color(0xFFFFD54F);
 const _completeYellow = Color(0xFFFFD970);
 const _darkBrown = Color(0xFF3E2723);
 const _labelBrown = Color(0xFF7D6D6A);
-const _hintBrown = Color(0xFFBCAAA4);
 const _fieldBorder = Color(0xFFEFEBE9);
 const _iconBackground = Color(0xFFFFFDE7);
 
@@ -197,36 +196,8 @@ class _VerificationCard extends StatelessWidget {
 
 class _SignupStatusBar extends StatelessWidget {
   const _SignupStatusBar();
-
   @override
-  Widget build(BuildContext context) => const SizedBox(
-    height: 44,
-    child: Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '9:41',
-            style: TextStyle(
-              color: _darkBrown,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Row(
-            children: [
-              Icon(Icons.signal_cellular_4_bar, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.wifi, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.battery_full, color: _darkBrown, size: 20),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _SignupHeader extends StatelessWidget {

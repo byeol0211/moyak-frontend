@@ -7,9 +7,13 @@ import 'package:http/http.dart' as http;
 import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 
 import '../../data/demo_data.dart';
+import '../../data/machine_api.dart';
 import '../../data/models.dart';
 import '../../utils/format.dart';
 import '../../widgets/app_status_bar.dart';
+import '../../config/app_config.dart';
+
+import 'package:geolocator/geolocator.dart';
 
 const _mapCanvas = Color(0xFFF2EBDD);
 const _mapBox = Color(0xFFE9E1D0);
@@ -50,9 +54,83 @@ class _MapScreenState extends State<MapScreen> {
   Future<List<StockItem>>? _detailStock;
   String? _error;
   bool _loading = true;
+  final _searchController = TextEditingController();
+
+  /// 검색은 거리와 관계없이 서버가 준 전체 자판기를 대상으로 하고,
+  /// 이름·주소·자판기 코드에서 띄어쓰기와 대소문자를 무시하고 찾는다.
+  String get _query => _normalize(_searchController.text);
+  static String _normalize(String text) =>
+      text.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+  List<VendingMachine> get _visibleMachines => _query.isEmpty
+      ? _machines
+      : _machines
+            .where(
+              (machine) => _normalize(
+                '${machine.name} ${machine.address} ${machine.code ?? ''}',
+              ).contains(_query),
+            )
+            .toList();
+
+  void _searchChanged(String _) {
+    setState(() {
+      _detail = null;
+      _detailStock = null;
+    });
+  }
+
+  void _submitSearch(String _) {
+    FocusScope.of(context).unfocus();
+    final matches = _visibleMachines;
+    if (matches.isNotEmpty) _map?.panTo(_point(matches.first));
+  }
 
   // 위치 권한 연동 전이라 거리는 기본 위치 기준으로 계산한다.
-  LatLng get _origin => _defaultCenter;
+  LatLng? _position;
+  String _locationMessage = '기본 위치 기준 거리입니다. 내 위치 버튼으로 위치를 확인할 수 있어요.';
+  bool _locating = false;
+  LatLng get _origin => _position ?? _defaultCenter;
+
+  Future<void> _locate() async {
+    if (_locating) return;
+    setState(() => _locating = true);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        throw StateError('기기의 위치 서비스를 켜주세요.');
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.deniedForever) {
+        throw StateError('위치 권한이 차단되어 있어요. 기기 설정에서 허용해주세요.');
+      }
+      if (permission == LocationPermission.denied) {
+        throw StateError('위치 권한 없이 기본 위치로 안내합니다.');
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _position = LatLng(position.latitude, position.longitude);
+        _locationMessage = '현재 위치 기준으로 가까운 자판기를 안내합니다.';
+      });
+      await _load();
+      _map?.panTo(_origin);
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _locationMessage = error is StateError
+              ? error.message.toString()
+              : '현재 위치를 확인하지 못했어요. 기본 위치로 안내합니다.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
 
   LatLng _point(VendingMachine m) => LatLng(m.latitude, m.longitude);
 
@@ -68,11 +146,44 @@ class _MapScreenState extends State<MapScreen> {
       _error = null;
     });
     try {
-      const apiBase = String.fromEnvironment('API_BASE_URL');
-      final base = apiBase.isEmpty ? Uri.base : Uri.parse(apiBase);
-      final r = await _client
-          .get(base.resolve('/api/v1/map/machines'))
-          .timeout(const Duration(seconds: 20));
+      final preview = AppConfig.preview.value && widget.client == null;
+      final r = preview
+          ? http.Response(
+              jsonEncode({
+                'items': [
+                  {
+                    'id': demoConnectedMachine.id,
+                    'name': '미리보기 자판기',
+                    'latitude': 37.4509,
+                    'longitude': 126.6539,
+                    'address': '화면 확인용 위치',
+                    'stock_count': 60,
+                  },
+                  {
+                    'id': 'preview-empty',
+                    'name': '미리보기 품절 자판기',
+                    'latitude': 37.453,
+                    'longitude': 126.656,
+                    'stock_count': 0,
+                  },
+                ],
+              }),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            )
+          : await _client
+                .get(
+                  (widget.client != null && AppConfig.apiBaseUrl.isEmpty
+                          ? Uri(path: '/api/v1/map/machines')
+                          : AppConfig.endpoint('/api/v1/map/machines'))
+                      .replace(
+                        queryParameters: {
+                          'lat': '${_origin.latitude}',
+                          'lng': '${_origin.longitude}',
+                        },
+                      ),
+                )
+                .timeout(const Duration(seconds: 20));
       final data = jsonDecode(utf8.decode(r.bodyBytes));
       if (r.statusCode != 200) throw Exception(data['detail'] ?? '자판기 조회 실패');
       final machines = (data['items'] as List)
@@ -105,7 +216,10 @@ class _MapScreenState extends State<MapScreen> {
   void _openDetail(VendingMachine machine) {
     setState(() {
       _detail = machine;
-      _detailStock = fetchMachineStock(machine.id);
+      _detailStock = loadMachineStock(
+        machine.id,
+        client: widget.client == null ? null : _client,
+      );
     });
     _map?.panTo(_point(machine));
   }
@@ -117,6 +231,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     if (widget.client == null) _client.close();
     super.dispose();
   }
@@ -143,60 +258,123 @@ class _MapScreenState extends State<MapScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '내 주변 자판기',
-                    style: TextStyle(
-                      color: _mapInk,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                    ),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          '내 주변 자판기',
+                          style: TextStyle(
+                            color: _mapInk,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _locating ? null : _locate,
+                        tooltip: '내 위치 확인',
+                        icon: Icon(
+                          _locating ? Icons.hourglass_empty : Icons.my_location,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    _loading
-                        ? '위치를 확인하고 있어요...'
-                        : '위치 권한이 없어 기본 위치 기준 거리로 보여드려요',
+                    _loading ? '자판기 목록을 불러오는 중...' : _locationMessage,
                     style: const TextStyle(color: _mapMuted, fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('machine-search'),
+                    controller: _searchController,
+                    onChanged: _searchChanged,
+                    onSubmitted: _submitSearch,
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      hintText: '자판기 이름·주소 검색',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchController.text.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: '자판기 검색어 지우기',
+                              onPressed: () {
+                                _searchController.clear();
+                                _searchChanged('');
+                              },
+                              icon: const Icon(Icons.clear),
+                            ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _MapBox(
-                machines: _machines,
-                selectedId: widget.selectedMachineId,
-                focusedId: _detail?.id,
-                onMapCreated: (controller) => _map = controller,
-                onTapMachine: _openDetail,
-                onLocate: () => _map?.panTo(_origin),
-                center: _machines.isEmpty
-                    ? _defaultCenter
-                    : _point(_machines.first),
+            if (MediaQuery.viewInsetsOf(context).bottom == 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _MapBox(
+                  machines: _visibleMachines,
+                  selectedId: widget.selectedMachineId,
+                  focusedId: _detail?.id,
+                  onMapCreated: (controller) => _map = controller,
+                  onTapMachine: _openDetail,
+                  onLocate: _locate,
+                  center: _visibleMachines.isEmpty
+                      ? _defaultCenter
+                      : _point(_visibleMachines.first),
+                ),
               ),
-            ),
             const SizedBox(height: 12),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
                 child: _detail == null
-                    ? _MachineList(
-                        machines: _machines,
-                        distances: _distances,
-                        selectedId: widget.selectedMachineId,
-                        loading: _loading,
-                        error: _error,
-                        onRetry: _load,
-                        onTap: _openDetail,
-                      )
-                    : _MachineDetail(
-                        machine: _detail!,
-                        distance: _distances[_detail!.id],
-                        stock: _detailStock!,
-                        selected: _detail!.id == widget.selectedMachineId,
-                        onBack: _closeDetail,
-                        onSelect: () => widget.onSelectMachine(_detail!),
-                        onUnselect: widget.onUnselectMachine,
+                    ? !_loading &&
+                              _error == null &&
+                              _query.isNotEmpty &&
+                              _visibleMachines.isEmpty
+                          ? const _EmptyText(
+                              '검색 결과가 없어요. 자판기 이름이나 주소를 다시 확인해주세요.',
+                            )
+                          : _MachineList(
+                              machines: _visibleMachines,
+                              searching: _query.isNotEmpty,
+                              distances: _distances,
+                              selectedId: widget.selectedMachineId,
+                              loading: _loading,
+                              error: _error,
+                              onRetry: _load,
+                              onTap: _openDetail,
+                            )
+                    : LayoutBuilder(
+                        builder: (context, constraints) =>
+                            SingleChildScrollView(
+                              child: SizedBox(
+                                height: constraints.maxHeight.clamp(
+                                  400 *
+                                      MediaQuery.textScalerOf(context).scale(1),
+                                  double.infinity,
+                                ),
+                                child: _MachineDetail(
+                                  machine: _detail!,
+                                  distance: _distances[_detail!.id],
+                                  stock: _detailStock!,
+                                  selected:
+                                      _detail!.id == widget.selectedMachineId,
+                                  onBack: _closeDetail,
+                                  onSelect: () =>
+                                      widget.onSelectMachine(_detail!),
+                                  onUnselect: widget.onUnselectMachine,
+                                  onRetryStock: () => _openDetail(_detail!),
+                                ),
+                              ),
+                            ),
                       ),
               ),
             ),
@@ -254,7 +432,7 @@ class _MapBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 286,
+    height: (MediaQuery.sizeOf(context).height * 0.22).clamp(100.0, 240.0),
     decoration: BoxDecoration(
       color: _mapBox,
       borderRadius: BorderRadius.circular(24),
@@ -409,6 +587,7 @@ class _NumberPin extends StatelessWidget {
 class _MachineList extends StatelessWidget {
   const _MachineList({
     required this.machines,
+    required this.searching,
     required this.distances,
     required this.selectedId,
     required this.loading,
@@ -418,6 +597,9 @@ class _MachineList extends StatelessWidget {
   });
 
   final List<VendingMachine> machines;
+
+  /// 검색 중이면 제목을 "검색 결과 N곳"으로 바꾼다.
+  final bool searching;
   final Map<String, double> distances;
   final String? selectedId;
   final bool loading;
@@ -426,59 +608,62 @@ class _MachineList extends StatelessWidget {
   final ValueChanged<VendingMachine> onTap;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              loading ? '가까운 자판기' : '가까운 자판기 ${machines.length}곳',
-              style: const TextStyle(
-                color: _mapInk,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const Text(
-            '재고는 조회 시점 기준',
-            style: TextStyle(color: _mapMuted, fontSize: 11),
-          ),
-        ],
-      ),
-      const SizedBox(height: 10),
-      Expanded(
-        child: switch ((loading, error, machines.isEmpty)) {
-          (true, _, _) => const _EmptyText('자판기를 불러오는 중...'),
-          (_, final String message, _) => Column(
+  Widget build(BuildContext context) => ListView.builder(
+    padding: const EdgeInsets.only(bottom: 4),
+    itemCount: loading || error != null || machines.isEmpty
+        ? 2
+        : machines.length + 1,
+    itemBuilder: (context, index) {
+      if (index == 0) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: 8,
+            runSpacing: 4,
             children: [
-              _EmptyText(message),
-              TextButton(
-                onPressed: onRetry,
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF8B6914),
+              Text(
+                loading
+                    ? '가까운 자판기'
+                    : searching
+                    ? '전체 자판기 검색 결과 ${machines.length}곳'
+                    : '가까운 자판기 ${machines.length}곳',
+                style: const TextStyle(
+                  color: _mapInk,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
                 ),
-                child: const Text('다시 불러오기'),
+              ),
+              const Text(
+                '재고는 조회 시점 기준',
+                style: TextStyle(color: _mapMuted, fontSize: 11),
               ),
             ],
           ),
-          (_, _, true) => const _EmptyText('주변에 운영 중인 자판기가 없어요.'),
-          _ => ListView.separated(
-            padding: const EdgeInsets.only(bottom: 4),
-            itemCount: machines.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 10),
-            itemBuilder: (context, index) => _MachineCard(
-              number: index + 1,
-              machine: machines[index],
-              distance: distances[machines[index].id],
-              selected: machines[index].id == selectedId,
-              onTap: () => onTap(machines[index]),
-            ),
-          ),
-        },
-      ),
-    ],
+        );
+      }
+      if (loading) return const _EmptyText('자판기를 불러오는 중...');
+      if (error != null) {
+        return Column(
+          children: [
+            _EmptyText(error!),
+            TextButton(onPressed: onRetry, child: const Text('다시 불러오기')),
+          ],
+        );
+      }
+      if (machines.isEmpty) return const _EmptyText('주변에 운영 중인 자판기가 없어요.');
+      final machine = machines[index - 1];
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: _MachineCard(
+          number: index,
+          machine: machine,
+          distance: distances[machine.id],
+          selected: machine.id == selectedId,
+          onTap: () => onTap(machine),
+        ),
+      );
+    },
   );
 }
 
@@ -616,6 +801,7 @@ class _MachineDetail extends StatelessWidget {
     required this.onBack,
     required this.onSelect,
     required this.onUnselect,
+    required this.onRetryStock,
   });
 
   final VendingMachine machine;
@@ -625,6 +811,7 @@ class _MachineDetail extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onSelect;
   final VoidCallback onUnselect;
+  final VoidCallback onRetryStock;
 
   @override
   Widget build(BuildContext context) {
@@ -692,7 +879,15 @@ class _MachineDetail extends StatelessWidget {
               future: stock,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return const _EmptyText('재고를 불러오지 못했어요.');
+                  return ListView(
+                    children: [
+                      const _EmptyText('재고를 불러오지 못했어요.'),
+                      TextButton(
+                        onPressed: onRetryStock,
+                        child: const Text('다시 시도'),
+                      ),
+                    ],
+                  );
                 }
                 final items = snapshot.data;
                 if (items == null) return const _EmptyText('재고를 불러오는 중...');

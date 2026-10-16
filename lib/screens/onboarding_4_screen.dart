@@ -26,42 +26,45 @@ class Onboarding4Screen extends StatelessWidget {
     ),
     child: Scaffold(
       backgroundColor: _background,
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final previewWidth =
-              (constraints.maxWidth - 62).clamp(0.0, 339.0).toDouble();
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final previewWidth = (constraints.maxWidth - 62)
+                .clamp(0.0, 339.0)
+                .toDouble();
 
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              Column(
-                children: [
-                  const _StatusBar(),
-                  _SkipAction(onPressed: onSkip),
-                  const SizedBox(height: 59),
-                  const _IntroText(),
-                  const SizedBox(height: 23),
-                  Expanded(
-                    child: ClipRect(
-                      child: OverflowBox(
-                        alignment: Alignment.topCenter,
-                        minHeight: 0,
-                        maxHeight: double.infinity,
-                        child: _MapPhonePreview(width: previewWidth),
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                Column(
+                  children: [
+                    const _StatusBar(),
+                    _SkipAction(onPressed: onSkip),
+                    const SizedBox(height: 59),
+                    const _IntroText(),
+                    const SizedBox(height: 23),
+                    Expanded(
+                      child: ClipRect(
+                        child: OverflowBox(
+                          alignment: Alignment.topCenter,
+                          minHeight: 0,
+                          maxHeight: double.infinity,
+                          child: _MapPhonePreview(width: previewWidth),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _BottomControls(onStart: onStart),
-              ),
-            ],
-          );
-        },
+                  ],
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _BottomControls(onStart: onStart),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     ),
   );
@@ -69,36 +72,8 @@ class Onboarding4Screen extends StatelessWidget {
 
 class _StatusBar extends StatelessWidget {
   const _StatusBar();
-
   @override
-  Widget build(BuildContext context) => const SizedBox(
-    height: 44,
-    child: Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '9:41',
-            style: TextStyle(
-              color: _darkBrown,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Row(
-            children: [
-              Icon(Icons.signal_cellular_4_bar, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.wifi, color: _darkBrown, size: 18),
-              SizedBox(width: 6),
-              Icon(Icons.battery_full, color: _darkBrown, size: 20),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _SkipAction extends StatelessWidget {
@@ -158,11 +133,7 @@ class _IntroText extends StatelessWidget {
         Text(
           '실시간 재고 확인과 최단 경로 길찾기까지 스마트하게 제공합니다.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: _labelBrown,
-            fontSize: 15,
-            height: 1.5,
-          ),
+          style: TextStyle(color: _labelBrown, fontSize: 15, height: 1.5),
         ),
       ],
     ),
