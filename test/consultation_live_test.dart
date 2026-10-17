@@ -133,6 +133,20 @@ void main() {
     expect(find.text('처방약: 타이레놀정500밀리그람'), findsOneWidget);
     expect(find.text('상담 요청 취소'), findsNothing);
     expect(requests.where((r) => r == 'POST /consultations'), hasLength(1));
+    // 서버 종료 이후에도 약사가 늦게 공개하는 요약을 계속 조회한다.
+    current = _consultation(status: 'approved', endedAt: '2026-10-17T05:10:00');
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    await tester.pump();
+    current = _consultation(
+      status: 'approved',
+      endedAt: '2026-10-17T05:10:00',
+      summary: '검토 후 공개된 상담 요약',
+    );
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    await tester.pump();
+    expect(AppSession.instance.consultation?.summary, '검토 후 공개된 상담 요약');
 
     await tester.pumpWidget(const SizedBox());
   });

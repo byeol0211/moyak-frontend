@@ -82,6 +82,7 @@ class FakeChat implements ConsultationChat {
   String? get summary => ended || remoteEnded ? '서버 상담 요약' : null;
   bool failSend = false;
   bool failEnd = false;
+  int endCalls = 0;
   bool ended = false;
   bool remoteEnded = false;
   final messages = <CallChatMessage>[
@@ -104,6 +105,7 @@ class FakeChat implements ConsultationChat {
 
   @override
   Future<void> end() async {
+    endCalls++;
     if (failEnd) throw StateError('offline');
     ended = true;
   }
@@ -299,26 +301,20 @@ void main() {
     },
   );
 
-  testWidgets(
-    'failed server end can be retried or leave media without ending record',
-    (tester) async {
-      final call = FakeCall();
-      final chat = FakeChat()..failEnd = true;
-      await openCall(tester, call, chat: chat);
-      await tester.tap(find.text('상담 종료'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('종료'));
-      await tester.pumpAndSettle();
-      expect(call.closed, isTrue);
-      expect(find.textContaining('상담 종료를 서버에 반영하지 못했어요'), findsOneWidget);
-      await tester.tap(find.text('상담 종료'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('통화만 나가기'));
-      await tester.pumpAndSettle();
-      expect(call.closed, isTrue);
-      expect(chat.ended, isFalse);
-      expect(find.text('입장'), findsOneWidget);
-      call.dispose();
-    },
-  );
+  testWidgets('patient leaves media without calling server end', (
+    tester,
+  ) async {
+    final call = FakeCall();
+    final chat = FakeChat()..failEnd = true;
+    await openCall(tester, call, chat: chat);
+    await tester.tap(find.text('상담 종료'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('통화 나가기'));
+    await tester.pumpAndSettle();
+    expect(call.closed, isTrue);
+    expect(chat.endCalls, 0);
+    expect(chat.ended, isFalse);
+    expect(find.text('입장'), findsOneWidget);
+    call.dispose();
+  });
 }

@@ -7,7 +7,7 @@ import '../calls/call_room.dart';
 import '../calls/daily_call_factory.dart';
 import '../calls/consultation_chat.dart';
 
-enum _ExitChoice { cancel, leave, end }
+enum _ExitChoice { cancel, leave }
 
 /// The call surface stays mounted while chat floats over it.
 class VideoConsultationPage extends StatefulWidget {
@@ -215,25 +215,21 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
         content: Text(
           _preview
               ? '미리보기 메시지는 저장되지 않습니다. 실제 상담은 진행되지 않았습니다.'
-              : '통화를 나가거나 상담을 종료할 수 있어요.',
+              : '영상통화를 나가고 상담 결과를 기다립니다. 약사가 상담을 마무리하고 검토한 요약을 공개해요.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, _ExitChoice.cancel),
             child: const Text('계속 보기'),
           ),
-          if (!_preview && widget.chat != null && !_serverEnded)
-            TextButton(
-              onPressed: () => Navigator.pop(context, _ExitChoice.leave),
-              child: const Text('통화만 나가기'),
-            ),
           TextButton(
-            onPressed: () => Navigator.pop(context, _ExitChoice.end),
-            child: const Text('종료'),
+            onPressed: () => Navigator.pop(context, _ExitChoice.leave),
+            child: Text(_preview ? '종료' : '통화 나가기'),
           ),
         ],
       ),
     );
+    if (!mounted) return;
     if (confirmed == null || confirmed == _ExitChoice.cancel) {
       _ending = false;
       return;
@@ -243,22 +239,11 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
       await _call?.close();
       if (!mounted) return;
       setState(() => _mediaClosed = true);
-      if (confirmed == _ExitChoice.end &&
-          !_serverEnded &&
-          widget.chat != null) {
-        await widget.chat!.end();
-      }
-      if (mounted) {
-        Navigator.pop(
-          context,
-          confirmed == _ExitChoice.end && (_preview || widget.chat != null),
-        );
-      }
+      // 환자는 미디어 연결만 닫는다. 서버 종료와 요약 공개는 약사가 처리한다.
+      Navigator.pop(context, true);
     } catch (_) {
       if (mounted) {
-        setState(
-          () => _chatError = '상담 종료를 서버에 반영하지 못했어요. 다시 시도하거나 통화만 나가기를 선택해주세요.',
-        );
+        setState(() => _chatError = '통화 연결을 닫지 못했어요. 다시 시도해주세요.');
       }
     } finally {
       _ending = false;

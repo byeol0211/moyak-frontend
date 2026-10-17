@@ -81,6 +81,7 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
   Duration _elapsed = Duration.zero;
   bool _pharmacistIn = false;
   bool _showingEntry = false;
+  bool _leftCall = false;
   final _timers = <Timer>[];
 
   @override
@@ -161,7 +162,8 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
       );
       if (!mounted) return;
       _applySnapshot(snapshot, first: true);
-      if (!snapshot.finished) {
+      if (!snapshot.cancelled &&
+          (!snapshot.finished || snapshot.record.summary == null)) {
         _startClock();
         _timers.add(Timer.periodic(_pollInterval, (_) => _poll()));
       }
@@ -224,11 +226,13 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
       final next = await _api.get(current.id);
       if (!mounted) return;
       _applySnapshot(next);
-      if (next.finished) {
+      if (next.cancelled || (next.finished && next.record.summary != null)) {
         _stopTimers();
         return;
       }
-      if (next.roomUrl != null && next.record.summary == null) {
+      if (!next.finished &&
+          next.roomUrl != null &&
+          next.record.summary == null) {
         final inRoom = await _api.pharmacistInRoom(next.id);
         if (mounted && inRoom != null && inRoom != _pharmacistIn) {
           setState(() => _pharmacistIn = inRoom);
@@ -324,8 +328,9 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
     widget.onOpenChatbot();
   }
 
-  /// 화상 통화 화면에서 상담을 마치고 돌아왔을 때.
+  /// 환자가 통화를 나가면 서버 종료 없이 결과 대기 화면으로 돌아온다.
   void _handleCallEnded() {
+    _leftCall = true;
     if (_live) {
       setState(() => _showingEntry = false);
       _poll();
@@ -343,8 +348,7 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
               id: AppSession.instance.callConsultationId ?? 'completed',
               createdAt: _requestedAt,
               status: _status,
-              endedAt: DateTime.now(),
-              summary: widget.chat?.summary ?? '상담이 종료되었습니다. 상담 요약을 준비 중이에요.',
+              summary: widget.chat?.summary,
             );
     });
     if (widget.room != null) AppSession.instance.clearCallRoom();
@@ -420,7 +424,12 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
                   roomReady: _roomReady,
                   pharmacistIn: _pharmacistIn,
                   notice: !waitingForServer
-                      ? null
+                      ? (_leftCall && _record?.summary == null
+                            ? (
+                                '상담 결과를 기다리고 있어요',
+                                '약사가 상담을 마무리하고 검토한 요약을 공개하면 여기에 표시돼요.',
+                              )
+                            : null)
                       : _requestError != null
                       ? ('상담 요청에 실패했어요', _requestError!)
                       : ('상담을 요청하고 있어요', '서버가 잠들어 있으면 최대 1분쯤 걸릴 수 있어요.'),

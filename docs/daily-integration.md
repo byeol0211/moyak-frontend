@@ -11,7 +11,7 @@
 - 백그라운드에서는 카메라·마이크와 채팅 갱신을 중지하고 복귀 시 선택한 설정으로 재개합니다. 화면 폐기/퇴장 시 이벤트 구독과 미디어 클라이언트를 해제합니다.
 - 기존 반투명 채팅 UI를 유지합니다. 실제 통화에서는 상담 API의 메시지를 사용하며 Daily app-message 기능으로 대체하지 않았습니다.
 - 채팅 3초 갱신, ID 중복 제거, 서버 순서 유지, 전송 실패 시 입력 보존, 상대방의 상담 종료 반영을 구현했습니다.
-- 상담 종료 시 미디어를 먼저 해제한 뒤 기존 서버 종료 API를 호출합니다. 서버 반영 실패 시 재시도하거나 통화만 나갈 수 있습니다. 통화만 나가는 동작은 상담 기록을 종료하지 않습니다.
+- 환자가 종료 버튼을 누르고 **통화 나가기**를 선택하면 미디어 연결을 해제하고 결과 대기 화면으로 돌아갑니다. 환자 화면은 서버 종료 API를 호출하지 않습니다. 서버 상담 종료·요약 검토·공개는 약사 흐름에서 처리합니다.
 - 방/토큰은 메모리에서만 사용하고 진단 문자열에 노출하지 않습니다. 서버 API 키를 앱에 넣거나 방 생성 API를 호출하지 않습니다.
 
 ## Render와 연결한 지점
@@ -48,7 +48,6 @@ VideoConsultationPage(
 - `GET /consultations/{id}/messages`
 - `POST /consultations/{id}/messages`: `sender_role: user`, `sender_id`, `content`
 - `GET /consultations/{id}`: `ended_at`, `status`로 종료 확인
-- `POST /consultations/{id}/end`
 - `POST /consultations/{id}/cancel`
 
 서버 주소는 기존 `API_BASE_URL` 설정을 사용합니다.
@@ -65,7 +64,7 @@ Android 기기(앱)와 약사 웹(https://moyak-backend.onrender.com/pharmacist)
 2. 권한 거부, 카메라·마이크 설정, 렌즈 전환, 앱 백그라운드/복귀.
 3. 네트워크 단절과 다시 연결, 약사 입장·퇴장·카메라 끄기.
 4. 상담 ID를 연결한 상태에서 앱 ↔ 기존 약사 웹 채팅과 메시지 중복 여부.
-5. 양쪽에서 상담 종료, 앱의 종료 상태와 서버 요약·기록 확인.
+5. 환자가 통화 나가기 → 결과 대기 화면 이동 → 약사가 상담 종료·요약 검토·공개 → 앱에 공개 요약 표시. 환자 퇴장만으로 서버 상담이 종료되지 않는지도 확인.
 6. 토큰이 필요한 방에서 정상·만료 토큰 처리.
 
 ## 빌드 환경
@@ -77,3 +76,12 @@ Android 기기(앱)와 약사 웹(https://moyak-backend.onrender.com/pharmacist)
 - 자동 테스트는 실제 Daily 연결 대신 가짜 통화 엔진과 HTTP 응답으로 제어·재시도·정리·메시지·종료 흐름을 확인합니다. 웹 빌드는 모바일 SDK 코드가 웹 번들에서 제외되는지 확인하는 용도이며 모바일 통화 검증을 대신하지 않습니다.
 
 참고: [Daily Flutter SDK](https://pub.dev/packages/daily_flutter), [CallClient API](https://pub.dev/documentation/daily_flutter/latest/daily_flutter/CallClient-class.html), [백엔드 Flutter 인수인계](https://github.com/JONGBOK1/moyak-backend/blob/master/docs/flutter-handoff.md).
+
+## 환자 퇴장과 요약 대기 (2026-10-17)
+
+- `VideoConsultationPage`: 환자는 통화 연결만 닫고 상위 화면에 복귀합니다. 기존 `ApiConsultationChat.end()` 메서드는 남아 있지만 환자 종료 버튼에서는 사용하지 않습니다.
+- `ConsultationScreen`: 결과 대기 화면에서 3초마다 상담을 조회합니다. `ended_at`이 있어도 `summary`가 없으면 조회를 계속하며, 상담 종료와 요약 공개가 모두 확인되거나 상담이 취소되면 중지합니다. 화면 폐기 시에도 타이머를 해제합니다.
+- 요약을 공개하지 않은 상담은 화면이 살아 있는 동안 조회를 계속합니다. 요약을 생성하지 않는 상담의 최종 상태 처리는 추후 서버 계약과 함께 정해야 합니다.
+- 앱은 상담 조회 응답의 공개된 `summary`만 표시합니다. 녹음 업로드·동의·약사 검토 API를 앱에서 직접 구현한 것은 아닙니다.
+
+검증: `daily_call_test.dart`, `consultation_live_test.dart`, `frontend_flow_test.dart` 총 25개 통과. 수정한 코드·테스트 4개 파일의 정적 분석 오류 없음. 이번 종료 흐름의 실제 두 기기 통합 검증은 별도로 필요합니다.

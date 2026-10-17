@@ -66,12 +66,12 @@ flutter run -d chrome --web-port 5555
 | 약사 입장 알림 (3초) | ✅ 연결 | `GET /consultations/{id}/presence` | 〃 |
 | 상담 취소 | ✅ 연결 | `POST /consultations/{id}/cancel` | 〃 |
 | 화상 통화 입장 | ✅ 연결 (실제 통화 검증 전) | 상담 응답의 `room_url` → Daily | `calls/`, `video_consultation_page.dart` |
-| 통화 중 채팅, 상담 종료 | ✅ 연결 (실제 통화 검증 전) | `GET·POST /consultations/{id}/messages`, `POST .../end` | `calls/consultation_chat.dart` |
+| 통화 중 채팅, 환자 퇴장 | ✅ 연결 (변경된 퇴장 흐름은 기기 검증 필요) | `GET·POST /consultations/{id}/messages`, `GET /consultations/{id}`; 퇴장은 미디어 연결만 해제 | `calls/consultation_chat.dart`, `screens/video_consultation_page.dart` |
 | 내 상담 내역 | ✅ 연결 | `GET /consultations?user_id=` (취소 건 제외) | `data/consultation_api.dart` |
 | 전자 구매 허가서 | ✅ 연결 | `GET /vending/purchases?user_id=` | 〃 |
 | QR 스캔으로 자판기 연결 | ✅ 연결 (기기 확인 완료) | `POST /vending/scan` | `data/machine_api.dart`, `qr_camera_page.dart` |
 | 통화 녹음·약사 검토 요약 | ❌ 미연결 | `/consultations/{cid}/session`, `/audio`, `/summary` | 없음 |
-| 로그인·회원가입 | ❌ 서버 API 없음 | — | 화면만 있음 |
+| 로그인·회원가입 | ❌ 앱 인증 연동 전 | — | 화면만 있음 |
 
 공통 규칙 (`data/api_client.dart`):
 
@@ -129,7 +129,7 @@ lib/
 - 테스트용 키오스크 QR 화면: https://moyak-backend.onrender.com/kiosk/pairing/?machine=VM-001
 
 **약사 상담** (`consultation_screen.dart`)
-- 실제 모드: 상담 요청 → 3초마다 상태·약사 입장 확인 → 승인(처방약 표시)·거절(사유)·종료(요약) 반영. 상담이 종료되거나 취소되면 확인을 멈춥니다.
+- 실제 모드: 상담 요청 → 3초마다 상태·약사 입장 확인 → 승인(처방약 표시)·거절(사유)·종료(요약) 반영. 환자 퇴장 후 결과를 기다리며, 서버 상담 종료 후에도 공개 요약이 없으면 조회를 계속합니다. 종료와 공개 요약을 모두 확인하거나 취소되면 조회를 멈춥니다.
 - 하단 "상담하기"로 들어오면(`direct`) 대화 요약 없이 요청하고, 화상방이 준비되면 바로 입장 화면으로 갑니다.
 - 챗봇에서 들어오면 지금까지의 대화를 `사용자: … / 모약이: …` 형식으로 약사에게 전달합니다.
 - 요청에 실패하면 서버 메시지와 "다시 요청하기" 버튼을 보여줍니다.
