@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
 import '../data/app_session.dart';
+import '../data/auth_api.dart';
+import '../data/api_client.dart';
+
+import 'package:flutter/foundation.dart';
+
 import '../widgets/feature_notice.dart';
 
 const _background = Color(0xFFF5F5F3);
@@ -16,9 +21,11 @@ class LoginPage extends StatefulWidget {
     required this.onLogin,
     required this.onSignup,
     this.onFindAccount,
+    this.auth,
     super.key,
   });
 
+  final AuthApi? auth;
   final VoidCallback onLogin;
   final VoidCallback onSignup;
   final VoidCallback? onFindAccount;
@@ -30,11 +37,13 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _username = TextEditingController();
   final _password = TextEditingController();
+  late final AuthApi _auth = widget.auth ?? AuthApi();
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
+    if (widget.auth == null) _auth.close();
     _username.dispose();
     _password.dispose();
     super.dispose();
@@ -49,22 +58,29 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _error = '아이디와 비밀번호를 입력해주세요.');
       return;
     }
-    // There is no authentication API yet. Never pretend credentials were verified.
-    if (!preview && !guest) {
-      showFeatureNotice(context, '로그인은 준비 중이에요. 아래 화면 미리보기로 앱을 둘러보세요.');
-      return;
-    }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await AppSession.instance.initialize();
+      if (!preview && !guest) {
+        await _auth.login(_username.text, _password.text);
+        _password.clear();
+      } else {
+        await AppSession.instance.logout();
+        await AppSession.instance.initialize();
+      }
       if (!mounted) return;
       AppConfig.preview.value = preview;
       widget.onLogin();
-    } catch (_) {
-      if (mounted) setState(() => _error = '앱 정보를 저장하지 못했어요. 다시 시도해주세요.');
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _error = error is ApiException
+              ? error.message
+              : '서버에 연결하지 못했어요. 잠시 후 다시 시도해주세요.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -118,7 +134,7 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 12),
                   ],
                   LoginPrimaryButton(
-                    label: '로그인',
+                    label: _busy ? '처리 중...' : '로그인',
                     enabled: !_busy,
                     onPressed: () => _enter(preview: false),
                   ),
@@ -126,15 +142,18 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: _busy ? null : () => _enter(preview: true),
                     child: Text(_busy ? '준비 중...' : '회원가입 없이 화면 미리보기'),
                   ),
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _enter(preview: false, guest: true),
-                    child: const Text('게스트로 계속하기'),
-                  ),
+                  if (kDebugMode)
+                    TextButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _enter(preview: false, guest: true),
+                      child: const Text('게스트로 계속하기'),
+                    ),
                   const SizedBox(height: 24),
                   _AccountLinks(
-                    onSignup: widget.onSignup,
+                    onSignup: () {
+                      if (!_busy) widget.onSignup();
+                    },
                     onFindAccount:
                         widget.onFindAccount ??
                         () => showFeatureNotice(context),

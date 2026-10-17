@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import 'login_page.dart';
 import '../utils/input_validation.dart';
+import '../data/api_client.dart';
 
 const _background = Color(0xFFF5F5F3);
 const _brandYellow = Color(0xFFFFD54F);
@@ -83,7 +84,9 @@ class _SignupStep1ScreenState extends State<SignupStep1Screen> {
       if (!mounted) return;
       setState(() {
         _isAvailable = false;
-        _availabilityError = error is StateError
+        _availabilityError = error is ApiException
+            ? error.message
+            : error is StateError
             ? error.message.toString()
             : '아이디 확인 중 오류가 발생했습니다.';
       });

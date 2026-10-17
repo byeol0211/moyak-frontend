@@ -74,7 +74,7 @@ flutter run --dart-define=API_BASE_URL=https://moyak-backend.onrender.com
 | 화상·채팅 | ✅ 연결 (2026-10-17): 상담 응답의 room_url과 상담 ID를 `AppSession.attachCallRoom`으로 통화 화면에 전달. **실제 통화 검증 전** |
 | 상담 내역·허가서 | ✅ 연결 (2026-10-17): 두 화면의 `loadRecords`에 실제 조회 주입 |
 | QR | ✅ 연결 (2026-10-17, 기기 확인 완료): 인식한 machineId/token과 사용자 ID를 `POST /vending/scan`으로 전달하고, 성공 후에만 홈을 "연동됨"으로 갱신 |
-| 인증·가입 | ❌ 앱 인증 연동 전: `login_page.dart`, `screen_flows.dart`. 현재 임시 ID는 인증 자격 증명이 아님 |
+| 인증·가입 | ✅ 로그인·회원가입·Bearer 연결 (Render 설정 후 실서버 검증 필요): `login_page.dart`, `screen_flows.dart`. 현재 임시 ID는 인증 자격 증명이 아님 |
 
 홈의 "자판기 재고 보기(상품 구매하기)" 버튼은 기획 변경으로 제거했습니다(2026-10-17). 미리보기 모드의 상담 상태 선택·예시 허가서·예시 QR 연결은 화면 확인 기능입니다.
 
@@ -87,3 +87,9 @@ flutter build web --no-pub
 ```
 
 자동 테스트는 입력·QR 파싱·사용자 ID·대화/상담 상태·오류 재시도·작은 화면과 키보드 레이아웃을 검증합니다. Android/iOS 실제 기기의 카메라·마이크 권한, 앱 복귀, 위치 조회, QR 인식은 기기에서 별도 확인해야 합니다. 실제 상담 API 흐름은 `test/consultation_live_test.dart`에서 가짜 서버 응답으로 검증합니다. QR 연결은 갤럭시 S23과 Render 키오스크로 확인했습니다. 실제 영상 통화와 약사 웹 연동은 기기에서 통합 테스트가 필요합니다.
+
+## 직접 설치용 APK 및 인증 연동 (2026-10-17)
+
+로그인·아이디 중복 확인·가입을 서버 API에 연결했습니다. release APK에서는 실제 로그인 또는 화면 미리보기로 진입하며, 게스트 진입은 debug 전용입니다. 토큰은 메모리에만 유지하여 앱을 다시 실행하면 재로그인합니다. 위의 게스트 실행 안내는 debug 빌드 기준입니다.
+
+[APK 빌드·설정·제한사항](apk-release.md)을 참고하세요. Render 환경 변수와 실제 계정·기기 통합 검증은 별도로 진행합니다.

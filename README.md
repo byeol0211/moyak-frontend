@@ -12,7 +12,7 @@
 - QR 스캔 자판기 연결 및 Android APK 빌드·갤럭시 S23 실행 확인 완료
 - 앱에서는 재고 조회만 제공하며, 상품 구매·결제는 자판기에서 진행
 
-남은 작업: 통화 중 채팅·종료 동기화 및 연결 복구 검증, 녹음·약사 검토 요약 연동, 카메라 권한 처리와 화면 배치 개선. 로그인·회원가입의 앱 인증 API 연동은 남아 있습니다.
+남은 작업: 통화 중 채팅·종료 동기화 및 연결 복구 검증, 녹음·약사 검토 요약 연동, 카메라 권한 처리와 화면 배치 개선. 로그인·회원가입 API와 Bearer 인증을 연결했습니다. Render 인증 설정 후 실제 계정으로 확인해야 합니다.
 
 ## 실행 방법
 
@@ -23,7 +23,7 @@ flutter pub get
 flutter run
 ```
 
-실제 서버(Render)와 연결해서 실행하려면 서버 주소를 지정하고 로그인 화면에서 **게스트로 계속하기**를 선택하세요.
+실제 서버(Render)와 연결해서 실행하려면 서버 주소를 지정한 뒤 **로그인**하거나 **회원가입**하세요. 게스트 진입은 debug 빌드에서만 제공합니다.
 
 ```sh
 flutter run --dart-define=API_BASE_URL=https://moyak-backend.onrender.com
@@ -32,3 +32,9 @@ flutter run --dart-define=API_BASE_URL=https://moyak-backend.onrender.com
 - 화면·파일 구성, 백엔드 연동 현황, Android 빌드 방법: [프론트엔드 구성](docs/frontend.md)
 - 화면별 확인 방법과 미리보기 기능: [프론트 작업 현황](docs/frontend-progress.md)
 - 화상 통화(Daily) 구현: [Daily 연동](docs/daily-integration.md)
+
+## 직접 설치용 APK 및 인증 연동 (2026-10-17)
+
+로그인·아이디 중복 확인·가입을 서버 API에 연결했습니다. release APK에서는 실제 로그인 또는 화면 미리보기로 진입하며, 게스트 진입은 debug 전용입니다. 토큰은 메모리에만 유지하여 앱을 다시 실행하면 재로그인합니다. 위의 게스트 실행 안내는 debug 빌드 기준입니다.
+
+[APK 빌드·설정·제한사항](docs/apk-release.md)을 참고하세요. Render 환경 변수와 실제 계정·기기 통합 검증은 별도로 진행합니다.

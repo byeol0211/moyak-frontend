@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
+import 'auth_session.dart';
 
 class ApiClient {
   /// [client]는 테스트에서 가짜 응답을 넣을 때 쓴다. 서버 주소 설정이 없으면
@@ -30,7 +31,17 @@ class ApiClient {
     Map<String, String>? headers,
     Duration timeout = const Duration(seconds: 20),
   }) async => _decode(
-    await _client.get(uri(path, query), headers: headers).timeout(timeout),
+    await _client
+        .get(
+          uri(path, query),
+          headers: {
+            ...((path.startsWith('/auth/') && path != '/auth/me')
+                ? <String, String>{}
+                : AuthSession.headers()),
+            ...?headers,
+          },
+        )
+        .timeout(timeout),
   );
 
   Future<dynamic> post(
@@ -41,7 +52,12 @@ class ApiClient {
     await _client
         .post(
           uri(path),
-          headers: body == null ? null : {'Content-Type': 'application/json'},
+          headers: {
+            ...((path.startsWith('/auth/') && path != '/auth/me')
+                ? <String, String>{}
+                : AuthSession.headers()),
+            if (body != null) 'Content-Type': 'application/json',
+          },
           body: body == null ? null : jsonEncode(body),
         )
         .timeout(timeout),

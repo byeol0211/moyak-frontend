@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
+import '../data/auth_session.dart';
 
 class CallChatMessage {
   const CallChatMessage({
@@ -56,7 +57,9 @@ class ApiConsultationChat implements ConsultationChat {
   dynamic _decode(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
-        response.statusCode == 409
+        response.statusCode == 401
+            ? '로그인이 만료되었어요. 로그아웃 후 다시 로그인해주세요.'
+            : response.statusCode == 409
             ? '이미 종료된 상담이에요.'
             : '상담 서버 요청에 실패했어요. 다시 시도해주세요.',
       );
@@ -78,8 +81,12 @@ class ApiConsultationChat implements ConsultationChat {
   @override
   Future<ConsultationChatSnapshot> poll() async {
     final responses = await Future.wait([
-      _client.get(_endpoint('/messages')).timeout(const Duration(seconds: 15)),
-      _client.get(_endpoint('')).timeout(const Duration(seconds: 15)),
+      _client
+          .get(_endpoint('/messages'), headers: AuthSession.headers())
+          .timeout(const Duration(seconds: 15)),
+      _client
+          .get(_endpoint(''), headers: AuthSession.headers())
+          .timeout(const Duration(seconds: 15)),
     ]);
     final messages = _decode(responses[0]);
     final status = _decode(responses[1]);
@@ -102,7 +109,10 @@ class ApiConsultationChat implements ConsultationChat {
     final response = await _client
         .post(
           _endpoint('/messages'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            ...AuthSession.headers(),
+            'Content-Type': 'application/json',
+          },
           body: jsonEncode({
             'sender_role': 'user',
             'sender_id': userId,
@@ -116,7 +126,7 @@ class ApiConsultationChat implements ConsultationChat {
   @override
   Future<void> end() async {
     final response = await _client
-        .post(_endpoint('/end'))
+        .post(_endpoint('/end'), headers: AuthSession.headers())
         .timeout(const Duration(seconds: 90));
     final data = _decode(response);
     if (data is Map && data['summary'] is String) {
@@ -127,7 +137,7 @@ class ApiConsultationChat implements ConsultationChat {
   @override
   Future<void> cancel() async {
     final response = await _client
-        .post(_endpoint('/cancel'))
+        .post(_endpoint('/cancel'), headers: AuthSession.headers())
         .timeout(const Duration(seconds: 15));
     _decode(response);
   }

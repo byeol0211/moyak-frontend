@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'models.dart';
+import 'auth_session.dart';
 import '../calls/call_room.dart';
 import '../calls/consultation_chat.dart';
 
@@ -130,6 +131,7 @@ class AppSession extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    AuthSession.clear();
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove('moyak_user_id');
     userId = null;

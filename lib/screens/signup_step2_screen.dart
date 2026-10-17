@@ -14,10 +14,18 @@ const _successGreen = Color(0xFF2E7D32);
 const _errorRed = Color(0xFFC62828);
 
 class SignupStep2Screen extends StatefulWidget {
-  const SignupStep2Screen({this.onBack, this.onNext, super.key});
+  const SignupStep2Screen({
+    this.onBack,
+    this.onNext,
+    this.onSubmit,
+    this.busy = false,
+    super.key,
+  });
 
   final VoidCallback? onBack;
   final VoidCallback? onNext;
+  final ValueChanged<String>? onSubmit;
+  final bool busy;
 
   @override
   State<SignupStep2Screen> createState() => _SignupStep2ScreenState();
@@ -96,8 +104,15 @@ class _SignupStep2ScreenState extends State<SignupStep2Screen> {
               ),
             ),
             _SignupBottomAction(
-              enabled: _canContinue,
-              onPressed: widget.onNext,
+              enabled: _canContinue && !widget.busy,
+              onPressed: () {
+                if (widget.busy) return;
+                if (widget.onSubmit != null) {
+                  widget.onSubmit!(_passwordController.text);
+                } else {
+                  widget.onNext?.call();
+                }
+              },
             ),
           ],
         ),

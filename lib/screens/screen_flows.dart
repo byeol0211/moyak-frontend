@@ -10,9 +10,12 @@ import 'signup_step3_screen.dart';
 import '../config/app_config.dart';
 import '../widgets/feature_notice.dart';
 import '../data/app_session.dart';
+import '../data/auth_api.dart';
+import '../data/api_client.dart';
 
 class SignupFlow extends StatefulWidget {
-  const SignupFlow({required this.onComplete, super.key});
+  const SignupFlow({required this.onComplete, this.auth, super.key});
+  final AuthApi? auth;
 
   final VoidCallback onComplete;
 
@@ -22,8 +25,41 @@ class SignupFlow extends StatefulWidget {
 
 class _SignupFlowState extends State<SignupFlow> {
   int _step = 0;
+  String _username = '';
+  bool _busy = false;
+  late final AuthApi _auth = widget.auth ?? AuthApi();
+  @override
+  void dispose() {
+    if (widget.auth == null) _auth.close();
+    super.dispose();
+  }
+
+  Future<void> _signup(String password) async {
+    if (_busy) return;
+    if (AppConfig.preview.value) {
+      setState(() => _step = 2);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await _auth.signup(_username, password);
+      if (mounted) widget.onComplete();
+    } catch (error) {
+      if (mounted) {
+        showFeatureNotice(
+          context,
+          error is ApiException
+              ? error.message
+              : '가입 서버에 연결하지 못했어요. 다시 시도해주세요.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   void _goBack() {
+    if (_busy) return;
     if (_step == 0) {
       Navigator.of(context).maybePop();
     } else {
@@ -33,7 +69,7 @@ class _SignupFlowState extends State<SignupFlow> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: _step == 0,
+    canPop: _step == 0 && !_busy,
     onPopInvokedWithResult: (didPop, _) {
       if (!didPop) _goBack();
     },
@@ -43,9 +79,11 @@ class _SignupFlowState extends State<SignupFlow> {
           child: SafeArea(
             bottom: false,
             child: TextButton(
-              onPressed: () => setState(
-                () => AppConfig.preview.value = !AppConfig.preview.value,
-              ),
+              onPressed: _busy
+                  ? null
+                  : () => setState(
+                      () => AppConfig.preview.value = !AppConfig.preview.value,
+                    ),
               child: Text(
                 AppConfig.preview.value ? '가입 화면 미리보기 중 · 종료' : '가입 화면 미리보기 시작',
               ),
@@ -58,17 +96,19 @@ class _SignupFlowState extends State<SignupFlow> {
             children: [
               SignupStep1Screen(
                 onBack: _goBack,
-                onCheckAvailability: (_) async {
-                  if (!AppConfig.preview.value) {
-                    throw StateError('아이디 중복 확인 준비 중');
-                  }
-                  return true;
+                onCheckAvailability: (username) async {
+                  if (AppConfig.preview.value) return true;
+                  return _auth.available(username);
                 },
-                onNext: (_) => setState(() => _step = 1),
+                onNext: (username) => setState(() {
+                  _username = username;
+                  _step = 1;
+                }),
               ),
               SignupStep2Screen(
                 onBack: _goBack,
-                onNext: () => setState(() => _step = 2),
+                busy: _busy,
+                onSubmit: _signup,
               ),
               SignupStep3Screen(
                 onBack: _goBack,

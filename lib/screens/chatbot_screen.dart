@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
+import '../data/auth_session.dart';
+
 import '../widgets/consult_header.dart';
 import '../config/app_config.dart';
 import '../data/app_session.dart';
@@ -87,7 +89,10 @@ class _ChatPageState extends State<ChatPage> {
                   widget.client != null && AppConfig.apiBaseUrl.isEmpty
                       ? Uri(path: '/chat')
                       : AppConfig.endpoint('/chat'),
-                  headers: {'Content-Type': 'application/json'},
+                  headers: {
+                    ...AuthSession.headers(),
+                    'Content-Type': 'application/json',
+                  },
                   body: jsonEncode({'question': question, 'history': recent}),
                 )
                 .timeout(const Duration(seconds: 90));

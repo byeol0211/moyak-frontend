@@ -20,8 +20,9 @@ flutter run --dart-define=API_BASE_URL=https://moyak-backend.onrender.com
 flutter run -d chrome --web-port 5555
 ```
 
-- 로그인 화면에서 들어가는 방식이 두 가지입니다.
-  - **게스트로 계속하기**: 실제 서버로 동작합니다. 기기에 임시 사용자 ID(`moyak_user_id`)를 만들어 API에 씁니다.
+- 로그인 화면에서 들어가는 방식은 다음과 같습니다.
+  - **로그인 / 회원가입**: 서버 계정과 Bearer 토큰으로 실제 API를 사용합니다. 토큰은 메모리에만 유지하며 앱 재실행 시 다시 로그인합니다.
+  - **게스트로 계속하기** (debug 전용): 기기에 임시 사용자 ID(`moyak_user_id`)를 만들어 API에 씁니다.
   - **회원가입 없이 화면 미리보기**: 서버 없이 예시 데이터로 모든 화면 흐름을 확인합니다.
 - `API_BASE_URL`이 없으면 웹에서는 같은 출처로, 앱에서는 서버 연결 안내를 보여줍니다.
 - Render 무료 서버는 한동안 안 쓰면 잠들어 첫 요청이 1분쯤 걸립니다. 상담 요청은 70초까지 기다립니다.
@@ -71,7 +72,7 @@ flutter run -d chrome --web-port 5555
 | 전자 구매 허가서 | ✅ 연결 | `GET /vending/purchases?user_id=` | 〃 |
 | QR 스캔으로 자판기 연결 | ✅ 연결 (기기 확인 완료) | `POST /vending/scan` | `data/machine_api.dart`, `qr_camera_page.dart` |
 | 통화 녹음·약사 검토 요약 | ❌ 미연결 | `/consultations/{cid}/session`, `/audio`, `/summary` | 없음 |
-| 로그인·회원가입 | ❌ 앱 인증 연동 전 | — | 화면만 있음 |
+| 로그인·회원가입 | ✅ 연결 (실제 계정·기기 검증 필요) | `POST /auth/login`, `POST /auth/signup`, `GET /auth/username-available` | `data/auth_api.dart`, `data/auth_session.dart` |
 
 공통 규칙 (`data/api_client.dart`):
 
@@ -182,3 +183,9 @@ flutter build apk --release --split-per-abi --dart-define=API_BASE_URL=https://m
 - **화면 배치 다듬기:** 실제 기기(갤럭시 S23)에서 조정이 필요한 부분이 있습니다.
 - **카카오 지도 키:** 앱의 키와 서버(`/api/v1/map/config`)의 키가 서로 다릅니다. 하나로 통일하는 것이 좋습니다.
 - **지도 '길찾기' 링크:** 외부 링크를 열려면 `url_launcher` 패키지가 필요합니다.
+
+## 직접 설치용 APK 및 인증 연동 (2026-10-17)
+
+로그인·아이디 중복 확인·가입을 서버 API에 연결했습니다. release APK에서는 실제 로그인 또는 화면 미리보기로 진입하며, 게스트 진입은 debug 전용입니다. 토큰은 메모리에만 유지하여 앱을 다시 실행하면 재로그인합니다. 위의 게스트 실행 안내는 debug 빌드 기준입니다.
+
+[APK 빌드·설정·제한사항](apk-release.md)을 참고하세요. Render 환경 변수와 실제 계정·기기 통합 검증은 별도로 진행합니다.
