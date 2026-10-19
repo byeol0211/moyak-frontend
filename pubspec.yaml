@@ -24,8 +24,21 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
   assets:
     - assets/figma/
+
+# 앱 아이콘: assets/icon/M.png 한 장으로 각 플랫폼 아이콘을 만든다.
+# 이미지를 바꾼 뒤 `dart run flutter_launcher_icons`를 다시 실행하세요.
+flutter_launcher_icons:
+  image_path: assets/icon/M.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  web:
+    generate: true
+    background_color: "#FFD54F"
+    theme_color: "#FFD54F"
