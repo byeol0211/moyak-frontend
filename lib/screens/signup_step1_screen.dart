@@ -362,23 +362,7 @@ class _SignupBottomAction extends StatelessWidget {
           onPressed: onPressed ?? () {},
           enabled: enabled,
         ),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 33,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 20, bottom: 8),
-            child: Center(
-              child: Container(
-                width: 134,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: _darkBrown.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(100),
-                ),
-              ),
-            ),
-          ),
-        ),
+        const SizedBox(height: 16),
       ],
     ),
   );

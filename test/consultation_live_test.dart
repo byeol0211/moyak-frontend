@@ -115,14 +115,14 @@ void main() {
       'chat_summary': '사용자: 머리가 아파요\n모약이: 타이레놀을 참고하세요',
     });
     expect(find.text('약사 연결을 기다리는 중이에요'), findsOneWidget);
-    expect(find.text('🎥 화상 상담 입장하기'), findsOneWidget);
+    expect(find.text('화상 상담 입장하기'), findsOneWidget);
     expect(AppSession.instance.callConsultationId, 'c-1');
 
     // 3초 후 상태 확인: 약사가 화상방에 들어왔다
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
     await tester.pump();
-    expect(find.text('🔔 약사가 들어왔어요 — 지금 입장하기'), findsOneWidget);
+    expect(find.text('약사가 들어왔어요 — 지금 입장하기'), findsOneWidget);
 
     // 약사가 처방을 승인했다
     current = _consultation(status: 'approved', drug: '타이레놀정500밀리그람');

@@ -60,7 +60,13 @@ class _PermissionBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
-    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+    // 시트 배경은 화면 끝까지 두고, 내용은 폰 하단 바(내비게이션 바) 위로 올린다.
+    padding: EdgeInsets.fromLTRB(
+      24,
+      32,
+      24,
+      24 + MediaQuery.viewPaddingOf(context).bottom,
+    ),
     decoration: const BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.vertical(top: Radius.circular(32)),

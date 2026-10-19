@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:kakao_map_plugin/kakao_map_plugin.dart' show AuthRepository;
 
 import 'data/consultation_api.dart';
@@ -276,9 +277,63 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  // 기기 탐색 API가 아직 없어 주변 자판기를 찾은 것처럼 잠시 기다린 뒤 연결한다.
+  // 기기 재탐색: 내 위치(없으면 기본 위치) 기준 가장 가까운 자판기를 찾아
+  // 지도에서 고른 것처럼 연결된 홈으로 보낸다.
+  bool _isScanningDevices = false;
+
   Future<void> _rescanDevices() async {
-    setState(() => selectedIndex = 1);
+    if (_isScanningDevices) return;
+    setState(() => _isScanningDevices = true);
+    try {
+      final results = await Future.wait([
+        _scanPosition().then(
+          (position) => findNearestMachine(
+            latitude: position?.latitude ?? _defaultScanLatitude,
+            longitude: position?.longitude ?? _defaultScanLongitude,
+          ),
+        ),
+        // 탐색 중 안내가 너무 짧게 스쳐 가지 않도록 최소 시간을 둔다.
+        Future<void>.delayed(const Duration(milliseconds: 1500)),
+      ]);
+      if (!mounted) return;
+      final machine = results.first as VendingMachine?;
+      if (machine == null) {
+        showFeatureNotice(context, '주변에서 연결할 자판기를 찾지 못했어요. QR 스캔으로 연결해주세요.');
+      } else {
+        _connectMachine(machine);
+      }
+    } catch (_) {
+      if (mounted) {
+        showFeatureNotice(context, '주변 기기를 찾지 못했어요. 잠시 후 다시 시도해주세요.');
+      }
+    } finally {
+      if (mounted) setState(() => _isScanningDevices = false);
+    }
+  }
+
+  // 지도 화면과 같은 기본 위치(위치 권한이 없을 때 사용).
+  static const _defaultScanLatitude = 37.4509;
+  static const _defaultScanLongitude = 126.6539;
+
+  Future<Position?> _scanPosition() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return null;
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return null;
+      }
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   void _openQrScanner() {
@@ -384,7 +439,7 @@ class _AppShellState extends State<AppShell> {
           : MainHomeDisconnectedScreen(
               onScanQr: _openQrScanner,
               onRescanDevice: _rescanDevices,
-              isScanning: false,
+              isScanning: _isScanningDevices,
             ),
       MapScreen(
         selectedMachineId: machine?.id,

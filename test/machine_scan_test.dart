@@ -25,6 +25,8 @@ final _machines = {
 };
 
 void main() {
+  _findNearestTests();
+
   test('logs in to the machine and finds its name by code', () async {
     Map<String, dynamic>? sent;
     final client = MockClient((request) async {
@@ -87,6 +89,37 @@ void main() {
           'QR 코드가 만료되었습니다.',
         ),
       ),
+    );
+  });
+}
+
+void _findNearestTests() {
+  test('rescan picks the closest machine for the given position', () async {
+    Uri? requested;
+    final client = MockClient((request) async {
+      requested = request.url;
+      return _json({
+        'items': [
+          {'id': 'no-position', 'name': '좌표 없는 자판기'},
+          ..._machines['items']!,
+        ],
+      });
+    });
+    final machine = await findNearestMachine(
+      latitude: 37.5,
+      longitude: 126.86,
+      client: client,
+    );
+    expect(requested!.path, '/api/v1/map/machines');
+    expect(requested!.queryParameters, {'lat': '37.5', 'lng': '126.86'});
+    expect(machine!.code, 'VM-001');
+  });
+
+  test('rescan returns null when no machine is nearby', () async {
+    final client = MockClient((_) async => _json({'items': []}));
+    expect(
+      await findNearestMachine(latitude: 0, longitude: 0, client: client),
+      isNull,
     );
   });
 }

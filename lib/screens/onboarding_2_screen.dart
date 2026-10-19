@@ -245,15 +245,7 @@ class _OnboardingBottomControls extends StatelessWidget {
               onPressed: onNext ?? () {},
             ),
           ),
-          const SizedBox(height: 28),
-          Container(
-            width: 134,
-            height: 5,
-            decoration: BoxDecoration(
-              color: _darkBrown.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(100),
-            ),
-          ),
+          const SizedBox(height: 16),
         ],
       ),
     ),

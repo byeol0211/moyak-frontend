@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -188,57 +190,169 @@ class _HomeHeader extends StatelessWidget {
   );
 }
 
-class _HomeInfoBanner extends StatelessWidget {
+class _HomeInfoBanner extends StatefulWidget {
   const _HomeInfoBanner();
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
+  State<_HomeInfoBanner> createState() => _HomeInfoBannerState();
+}
+
+const _ads = [
+  (title: '급한 의약품이 있다면? 자판기에서 바로!', subtitle: '약국이 닫혔다면? 의약품 자동판매기에서 바로 구매'),
+  (title: '무슨 약이 필요한지 모르겠다면? 모약이에게!', subtitle: '약품 정보부터 비대면 상담 전 가벼운 문진까지'),
+  (
+    title: '약사와의 상담? 비대면 화상 상담으로 빠르게!',
+    subtitle: '약사에게 원격 허가서를 받아 자판기에서 빠르게 구매',
+  ),
+  (title: 'QR로 자판기에서 간단하게 구매하자!', subtitle: '허가서 받은 약품은 QR로 절차 없이 빠르게 수령 가능'),
+];
+
+class _HomeInfoBannerState extends State<_HomeInfoBanner> {
+  static const _interval = Duration(seconds: 4);
+
+  // 양쪽으로 계속 넘길 수 있도록 큰 페이지 수의 가운데에서 시작한다.
+  static final _initialPage = _ads.length * 1000;
+
+  final _controller = PageController(initialPage: _initialPage);
+  Timer? _timer;
+  int _page = _initialPage;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 메인 탭이 화면에 보일 때만(TickerMode 활성) 자동으로 넘긴다.
+    if (TickerMode.valuesOf(context).enabled) {
+      _restartTimer();
+    } else {
+      _timer?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _restartTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(_interval, (_) {
+      if (!_controller.hasClients) return;
+      _controller.nextPage(
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 68,
+    child: NotificationListener<ScrollStartNotification>(
+      // 손으로 넘기면 자동 넘김 시간을 처음부터 다시 잰다.
+      onNotification: (notification) {
+        if (notification.dragDetails != null &&
+            TickerMode.valuesOf(context).enabled) {
+          _restartTimer();
+        }
+        return false;
+      },
+      child: PageView.builder(
+        controller: _controller,
+        onPageChanged: (page) => setState(() => _page = page),
+        itemBuilder: (context, page) {
+          final index = page % _ads.length;
+          return _AdCard(
+            title: _ads[index].title,
+            subtitle: _ads[index].subtitle,
+            pageLabel: '${index + 1}/${_ads.length}',
+            semanticsLabel: page == _page
+                ? '광고 ${index + 1}/${_ads.length}'
+                : null,
+          );
+        },
+      ),
     ),
-    child: const Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '급한 의약품이 있다면? 자판기에서 바로!',
-                style: TextStyle(
+  );
+}
+
+class _AdCard extends StatelessWidget {
+  const _AdCard({
+    required this.title,
+    required this.subtitle,
+    required this.pageLabel,
+    this.semanticsLabel,
+  });
+
+  final String title;
+  final String subtitle;
+  final String pageLabel;
+  final String? semanticsLabel;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: semanticsLabel,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: _darkBrown,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: _secondaryBrown,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              color: Color(0xFFF4EEE2),
+              borderRadius: BorderRadius.all(Radius.circular(12)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              child: Text(
+                pageLabel,
+                style: const TextStyle(
                   color: _darkBrown,
-                  fontSize: 14,
+                  fontSize: 10,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              SizedBox(height: 4),
-              Text(
-                '약품 정보부터 비대면 의약품 화상 상담까지 스마트하게',
-                style: TextStyle(color: _secondaryBrown, fontSize: 11),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(width: 8),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: Color(0xFFF4EEE2),
-            borderRadius: BorderRadius.all(Radius.circular(12)),
-          ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-            child: Text(
-              '1/4',
-              style: TextStyle(
-                color: _darkBrown,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }
@@ -333,7 +447,7 @@ class _DisconnectedCard extends StatelessWidget {
                     ),
                   )
                 : const Icon(Icons.refresh, size: 20),
-            label: Text(isScanning ? '주변 기기 탐색 중...' : '기기 재탐색'),
+            label: Text(isScanning ? '주변 기기를 탐색합니다...' : '기기 재탐색'),
             style: OutlinedButton.styleFrom(
               foregroundColor: _brandYellow,
               disabledForegroundColor: _brandYellow,

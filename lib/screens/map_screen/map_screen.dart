@@ -229,6 +229,19 @@ class _MapScreenState extends State<MapScreen> {
     _detailStock = null;
   });
 
+  // 지도 크게 보기: 같은 지도를 목록 자리까지 넓혀 보여준다.
+  bool _mapExpanded = false;
+
+  void _toggleMapExpanded() {
+    FocusScope.of(context).unfocus();
+    setState(() => _mapExpanded = !_mapExpanded);
+  }
+
+  void _tapMachineOnMap(VendingMachine machine) {
+    if (_mapExpanded) setState(() => _mapExpanded = false);
+    _openDetail(machine);
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -237,7 +250,17 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_mapExpanded,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) _toggleMapExpanded();
+    },
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(
+    BuildContext context,
+  ) => AnnotatedRegion<SystemUiOverlayStyle>(
     value: const SystemUiOverlayStyle(
       statusBarColor: _mapCanvas,
       statusBarIconBrightness: Brightness.dark,
@@ -253,131 +276,149 @@ class _MapScreenState extends State<MapScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const AppStatusBar(color: _mapInk),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          '내 주변 자판기',
-                          style: TextStyle(
-                            color: _mapInk,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
+            if (!_mapExpanded)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            '내 주변 자판기',
+                            style: TextStyle(
+                              color: _mapInk,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: _locating ? null : _locate,
-                        tooltip: '내 위치 확인',
-                        icon: Icon(
-                          _locating ? Icons.hourglass_empty : Icons.my_location,
+                        IconButton(
+                          onPressed: _locating ? null : _locate,
+                          tooltip: '내 위치 확인',
+                          icon: Icon(
+                            _locating
+                                ? Icons.hourglass_empty
+                                : Icons.my_location,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _loading ? '자판기 목록을 불러오는 중...' : _locationMessage,
+                      style: const TextStyle(color: _mapMuted, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const Key('machine-search'),
+                      controller: _searchController,
+                      onChanged: _searchChanged,
+                      onSubmitted: _submitSearch,
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        hintText: '자판기 이름·주소 검색',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _searchController.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: '자판기 검색어 지우기',
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _searchChanged('');
+                                },
+                                icon: const Icon(Icons.clear),
+                              ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _loading ? '자판기 목록을 불러오는 중...' : _locationMessage,
-                    style: const TextStyle(color: _mapMuted, fontSize: 12),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    key: const Key('machine-search'),
-                    controller: _searchController,
-                    onChanged: _searchChanged,
-                    onSubmitted: _submitSearch,
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      hintText: '자판기 이름·주소 검색',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _searchController.text.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: '자판기 검색어 지우기',
-                              onPressed: () {
-                                _searchController.clear();
-                                _searchChanged('');
-                              },
-                              icon: const Icon(Icons.clear),
-                            ),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            if (MediaQuery.viewInsetsOf(context).bottom == 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _MapBox(
-                  machines: _visibleMachines,
-                  selectedId: widget.selectedMachineId,
-                  focusedId: _detail?.id,
-                  onMapCreated: (controller) => _map = controller,
-                  onTapMachine: _openDetail,
-                  onLocate: _locate,
-                  center: _visibleMachines.isEmpty
-                      ? _defaultCenter
-                      : _point(_visibleMachines.first),
+                  ],
                 ),
               ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                child: _detail == null
-                    ? !_loading &&
-                              _error == null &&
-                              _query.isNotEmpty &&
-                              _visibleMachines.isEmpty
-                          ? const _EmptyText(
-                              '검색 결과가 없어요. 자판기 이름이나 주소를 다시 확인해주세요.',
-                            )
-                          : _MachineList(
-                              machines: _visibleMachines,
-                              searching: _query.isNotEmpty,
-                              distances: _distances,
-                              selectedId: widget.selectedMachineId,
-                              loading: _loading,
-                              error: _error,
-                              onRetry: _load,
-                              onTap: _openDetail,
-                            )
-                    : LayoutBuilder(
-                        builder: (context, constraints) =>
-                            SingleChildScrollView(
-                              child: SizedBox(
-                                height: constraints.maxHeight.clamp(
-                                  400 *
-                                      MediaQuery.textScalerOf(context).scale(1),
-                                  double.infinity,
-                                ),
-                                child: _MachineDetail(
-                                  machine: _detail!,
-                                  distance: _distances[_detail!.id],
-                                  stock: _detailStock!,
-                                  selected:
-                                      _detail!.id == widget.selectedMachineId,
-                                  onBack: _closeDetail,
-                                  onSelect: () =>
-                                      widget.onSelectMachine(_detail!),
-                                  onUnselect: widget.onUnselectMachine,
-                                  onRetryStock: () => _openDetail(_detail!),
+            if (MediaQuery.viewInsetsOf(context).bottom == 0)
+              // 크게 보기를 켜고 꺼도 같은 지도가 유지되도록 키를 둔다.
+              Flexible(
+                key: const ValueKey('map-box'),
+                flex: _mapExpanded ? 1 : 0,
+                fit: FlexFit.tight,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    _mapExpanded ? 4 : 0,
+                    20,
+                    _mapExpanded ? 16 : 0,
+                  ),
+                  child: _MapBox(
+                    machines: _visibleMachines,
+                    selectedId: widget.selectedMachineId,
+                    focusedId: _detail?.id,
+                    expanded: _mapExpanded,
+                    onMapCreated: (controller) => _map = controller,
+                    onTapMachine: _tapMachineOnMap,
+                    onLocate: _locate,
+                    onToggleExpanded: _toggleMapExpanded,
+                    center: _visibleMachines.isEmpty
+                        ? _defaultCenter
+                        : _point(_visibleMachines.first),
+                  ),
+                ),
+              ),
+            if (!_mapExpanded) const SizedBox(height: 12),
+            if (!_mapExpanded)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                  child: _detail == null
+                      ? !_loading &&
+                                _error == null &&
+                                _query.isNotEmpty &&
+                                _visibleMachines.isEmpty
+                            ? const _EmptyText(
+                                '검색 결과가 없어요. 자판기 이름이나 주소를 다시 확인해주세요.',
+                              )
+                            : _MachineList(
+                                machines: _visibleMachines,
+                                searching: _query.isNotEmpty,
+                                distances: _distances,
+                                selectedId: widget.selectedMachineId,
+                                loading: _loading,
+                                error: _error,
+                                onRetry: _load,
+                                onTap: _openDetail,
+                              )
+                      : LayoutBuilder(
+                          builder: (context, constraints) =>
+                              SingleChildScrollView(
+                                child: SizedBox(
+                                  height: constraints.maxHeight.clamp(
+                                    400 *
+                                        MediaQuery.textScalerOf(context)
+                                            .scale(1),
+                                    double.infinity,
+                                  ),
+                                  child: _MachineDetail(
+                                    machine: _detail!,
+                                    distance: _distances[_detail!.id],
+                                    stock: _detailStock!,
+                                    selected:
+                                        _detail!.id == widget.selectedMachineId,
+                                    onBack: _closeDetail,
+                                    onSelect: () =>
+                                        widget.onSelectMachine(_detail!),
+                                    onUnselect: widget.onUnselectMachine,
+                                    onRetryStock: () => _openDetail(_detail!),
+                                  ),
                                 ),
                               ),
-                            ),
-                      ),
+                        ),
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -416,23 +457,29 @@ class _MapBox extends StatelessWidget {
     required this.machines,
     required this.selectedId,
     required this.focusedId,
+    required this.expanded,
     required this.onMapCreated,
     required this.onTapMachine,
     required this.onLocate,
+    required this.onToggleExpanded,
     required this.center,
   });
 
   final List<VendingMachine> machines;
   final String? selectedId;
   final String? focusedId;
+  final bool expanded;
   final ValueChanged<KakaoMapController> onMapCreated;
   final ValueChanged<VendingMachine> onTapMachine;
   final VoidCallback onLocate;
+  final VoidCallback onToggleExpanded;
   final LatLng center;
 
   @override
   Widget build(BuildContext context) => Container(
-    height: (MediaQuery.sizeOf(context).height * 0.22).clamp(100.0, 240.0),
+    height: expanded
+        ? null
+        : (MediaQuery.sizeOf(context).height * 0.22).clamp(100.0, 240.0),
     decoration: BoxDecoration(
       color: _mapBox,
       borderRadius: BorderRadius.circular(24),
@@ -468,28 +515,20 @@ class _MapBox extends StatelessWidget {
               ),
               Positioned(
                 right: 12,
+                top: 12,
+                child: _MapRoundButton(
+                  icon: expanded ? Icons.fullscreen_exit : Icons.fullscreen,
+                  label: expanded ? '지도 작게 보기' : '지도 크게 보기',
+                  onTap: onToggleExpanded,
+                ),
+              ),
+              Positioned(
+                right: 12,
                 bottom: 12,
-                child: KakaoMapPointerInterceptor(
-                  child: Material(
-                    color: Colors.white,
-                    shape: const CircleBorder(),
-                    elevation: 3,
-                    shadowColor: const Color(0x333E2723),
-                    child: InkWell(
-                      onTap: onLocate,
-                      customBorder: const CircleBorder(),
-                      child: const SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Icon(
-                          Icons.my_location,
-                          color: _mapInk,
-                          size: 20,
-                          semanticLabel: '내 위치로',
-                        ),
-                      ),
-                    ),
-                  ),
+                child: _MapRoundButton(
+                  icon: Icons.my_location,
+                  label: '내 위치로',
+                  onTap: onLocate,
                 ),
               ),
             ],
@@ -519,6 +558,40 @@ class _MapBox extends StatelessWidget {
               ),
             ),
           ),
+  );
+}
+
+class _MapRoundButton extends StatelessWidget {
+  const _MapRoundButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => KakaoMapPointerInterceptor(
+    child: Tooltip(
+      message: label,
+      child: Material(
+        color: Colors.white,
+        shape: const CircleBorder(),
+        elevation: 3,
+        shadowColor: const Color(0x333E2723),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(icon, color: _mapInk, size: 20, semanticLabel: label),
+          ),
+        ),
+      ),
+    ),
   );
 }
 

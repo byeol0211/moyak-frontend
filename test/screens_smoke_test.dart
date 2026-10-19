@@ -9,6 +9,7 @@ import 'package:moyak/data/models.dart';
 import 'package:moyak/main.dart';
 import 'package:moyak/screens/chatbot_screen.dart';
 import 'package:moyak/screens/consult_history_screen.dart';
+import 'package:moyak/screens/consultation_entry_page.dart';
 import 'package:moyak/screens/consultation_screen.dart';
 import 'package:moyak/screens/map_screen/map_screen.dart';
 import 'package:moyak/screens/permit_list_screen.dart';
@@ -42,15 +43,15 @@ void main() {
 
     await tester.pump(const Duration(seconds: 3));
     expect(find.text('화상 상담 입장'), findsWidgets);
-    expect(find.text('카메라 켜기'), findsOneWidget);
-    expect(find.text('통화 화면 미리보기'), findsOneWidget);
+    expect(find.byTooltip('카메라 켜기'), findsOneWidget);
+    expect(find.text('입장 전 화면과 소리를 확인해 주세요'), findsOneWidget);
 
     // 뒤로가면 대기 화면에서 입장 버튼이 보이고, 약사가 들어오면 문구가 바뀐다
     await tester.tap(find.byTooltip('이전 화면'));
     await tester.pump();
-    expect(find.text('🎥 화상 상담 입장하기'), findsOneWidget);
+    expect(find.text('화상 상담 입장하기'), findsOneWidget);
     await tester.pump(const Duration(seconds: 8));
-    expect(find.text('🔔 약사가 들어왔어요 — 지금 입장하기'), findsOneWidget);
+    expect(find.text('약사가 들어왔어요 — 지금 입장하기'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -260,5 +261,32 @@ void main() {
     expect(find.text('품절'), findsOneWidget);
     expect(find.text('재고 5개'), findsOneWidget);
     expect(find.text('빠른 구매'), findsNothing);
+  });
+
+  testWidgets('entry: device switches and preview buttons stay in sync', (
+    tester,
+  ) async {
+    await _pumpPhone(
+      tester,
+      ConsultationEntryPage(onBack: () {}, onScanQr: () {}, onEnd: () {}),
+    );
+    expect(
+      find.text('화면 설정만 시연해요. 카메라·마이크 권한을 요청하거나 실제로 연결하지 않습니다.'),
+      findsOneWidget,
+    );
+    expect(find.text('꺼짐 · UI 예시'), findsNWidgets(2));
+    expect(find.text('켜짐 · UI 예시'), findsOneWidget);
+
+    // 카메라 카드 스위치를 켜면 미리보기 상자의 버튼도 "끄기"로 바뀐다.
+    await tester.tap(find.byType(Switch).first);
+    await tester.pump();
+    expect(find.byTooltip('카메라 끄기'), findsOneWidget);
+    expect(find.text('켜짐 · UI 예시'), findsNWidgets(2));
+
+    // 상자 안 마이크 버튼을 누르면 마이크 카드 스위치가 켜진다.
+    await tester.tap(find.byTooltip('마이크 켜기'));
+    await tester.pump();
+    final micSwitch = tester.widget<Switch>(find.byType(Switch).at(1));
+    expect(micSwitch.value, isTrue);
   });
 }

@@ -100,9 +100,9 @@ class _LoginPageState extends State<LoginPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(
-                    height: 43,
-                    child: Center(
+                  const Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
                       child: Text(
                         'MOYAK',
                         style: TextStyle(
@@ -110,7 +110,7 @@ class _LoginPageState extends State<LoginPage> {
                           fontSize: 68,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.4,
-                          height: 1,
+                          height: 1.1,
                         ),
                       ),
                     ),
@@ -187,7 +187,6 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
-          const _HomeIndicator(),
         ],
       ),
     ),
@@ -435,26 +434,5 @@ class _AccountLinks extends StatelessWidget {
         child: const Text('ID·PW 찾기', style: TextStyle(fontSize: 14)),
       ),
     ],
-  );
-}
-
-class _HomeIndicator extends StatelessWidget {
-  const _HomeIndicator();
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 33,
-    child: Align(
-      alignment: Alignment.topCenter,
-      child: Container(
-        width: 134,
-        height: 5,
-        margin: const EdgeInsets.only(top: 20),
-        decoration: BoxDecoration(
-          color: _darkBrown.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(100),
-        ),
-      ),
-    ),
   );
 }

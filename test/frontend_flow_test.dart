@@ -118,7 +118,7 @@ void main() {
     await tester.tap(find.text('승인').last);
     await tester.pump(const Duration(seconds: 4));
     expect(find.text('처방약: 예시 승인 약품'), findsOneWidget);
-    expect(find.text('통화 화면 미리보기'), findsNothing);
+    expect(find.text('입장 전 화면과 소리를 확인해 주세요'), findsNothing);
     await tester.tap(find.text('마이'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('전자 구매 허가서'));
@@ -234,13 +234,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 3));
     final id = AppSession.instance.consultation!.id;
-    expect(find.text('통화 화면 미리보기'), findsOneWidget);
+    expect(find.text('입장 전 화면과 소리를 확인해 주세요'), findsOneWidget);
     await tester.tap(find.text('모약이'));
     await tester.pump();
     await tester.tap(find.text('상담하기'));
     await tester.pump();
     expect(AppSession.instance.consultation!.id, id);
-    expect(find.text('통화 화면 미리보기'), findsOneWidget);
+    expect(find.text('입장 전 화면과 소리를 확인해 주세요'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 

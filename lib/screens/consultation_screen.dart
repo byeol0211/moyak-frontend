@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../data/models.dart';
 import '../utils/format.dart';
 import '../widgets/consult_header.dart';
+import '../widgets/pharmacist_theme.dart';
 import 'consultation_entry_page.dart';
 import '../config/app_config.dart';
 import '../data/api_client.dart';
@@ -14,7 +15,18 @@ import '../data/consultation_api.dart';
 import '../calls/call_room.dart';
 import '../calls/consultation_chat.dart';
 
-const _cardCream = Color(0xFFFFFCF6);
+// 약사 연결 대기 화면 색. 공통 값은 widgets/pharmacist_theme.dart.
+const _brown = pharmBrown;
+const _muted = pharmMuted;
+const _yellow = pharmYellow;
+const _pageBg = pharmPageBg;
+const _headerBg = pharmHeaderBg;
+const _green = pharmGreen;
+const _mint = pharmMint;
+const _whiteCard = pharmWhiteCard;
+const _divider = Color(0xFFD3CABA);
+const _pendingCircle = Color(0xFFF3EEE5);
+const _privacyBorder = Color(0xFFDBE5DC);
 const _danger = Color(0xFFC94C43);
 const _dangerBackground = Color(0xFFFBE7E4);
 
@@ -500,8 +512,10 @@ class _PharmacistWaitingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final preview = AppConfig.preview.value;
     final summary = record?.summary;
     final ended = record?.endedAt != null;
+    final waiting = status == ConsultStatus.pending && !ended;
     final (statusLabel, queueText) = notice != null
         ? notice!
         : ended && status == ConsultStatus.pending
@@ -522,30 +536,34 @@ class _PharmacistWaitingView extends StatelessWidget {
       _ when pharmacistIn => '약사가 화상 상담방에서 기다리고 있어요',
       _ => '연결되면 카메라·마이크를 확인해요',
     };
+    // 미리보기 모드는 예시 데이터라는 것을 화면에 함께 밝힌다.
+    final example = preview && notice == null && waiting ? ' · 예시' : '';
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: consultHeaderCream,
-      ),
+      value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: _headerBg),
       child: ColoredBox(
-        color: consultCream,
+        color: _pageBg,
         child: Column(
           children: [
-            ConsultCreamHeader(
+            PharmacistHeader(
               title: '약사상담',
               subtitle: '전문 약사와 안전하게 상담해요',
               onScanQr: onScanQr,
             ),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (preview) ...[
+                      const Center(child: DemoModeChip()),
+                      const SizedBox(height: 14),
+                    ],
                     _WaitingCard(
-                      statusLabel: statusLabel,
-                      dialLabel: status == ConsultStatus.pending && !ended
-                          ? '대기 시간'
+                      statusLabel: '$statusLabel$example',
+                      dialLabel: waiting
+                          ? '대기 시간${example.isEmpty ? '' : ' 예시'}'
                           : '상담',
                       dialValue: ended
                           ? '종료'
@@ -556,26 +574,23 @@ class _PharmacistWaitingView extends StatelessWidget {
                             },
                       queueText: queueText,
                       requestedAt: requestedAt,
-                      progress: status == ConsultStatus.pending ? 0.6 : 1,
+                      progress: status == ConsultStatus.pending ? 0.66 : 1,
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
                     _ProgressCard(
                       matchingDone: status != ConsultStatus.pending,
                       entryDone: status == ConsultStatus.approved,
                       entryDescription: step3Description,
                     ),
-                    if (notice == null &&
-                        status == ConsultStatus.pending &&
-                        roomReady &&
-                        !ended) ...[
-                      const SizedBox(height: 14),
+                    if (notice == null && waiting && roomReady) ...[
+                      const SizedBox(height: 20),
                       _JoinNowButton(pharmacistIn: pharmacistIn, onTap: onJoin),
                     ],
                     if (summary != null) ...[
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 16),
                       _SummaryCard(child: ConsultSummaryBody(summary: summary)),
                     ] else if (status == ConsultStatus.approved) ...[
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 16),
                       const _SummaryCard(
                         child: Text(
                           '약사가 상담 내용을 정리하고 있어요. 검토가 끝나면 여기에 자동으로 표시돼요.',
@@ -587,23 +602,23 @@ class _PharmacistWaitingView extends StatelessWidget {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 14),
-                    const _PrivacyNotice(),
+                    const SizedBox(height: 16),
+                    _PrivacyNotice(preview: preview),
                     if (onRetry != null) ...[
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 16),
                       SizedBox(
-                        height: 52,
+                        height: 56,
                         child: FilledButton.icon(
                           onPressed: requesting ? null : onRetry,
                           style: FilledButton.styleFrom(
-                            backgroundColor: consultGreen,
+                            backgroundColor: _green,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
                             textStyle: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                           icon: const Icon(Icons.refresh),
@@ -611,15 +626,15 @@ class _PharmacistWaitingView extends StatelessWidget {
                         ),
                       ),
                     ],
-                    if (status == ConsultStatus.pending && !ended) ...[
-                      const SizedBox(height: 14),
+                    if (waiting) ...[
+                      const SizedBox(height: 16),
                       _BottomActionButton(
                         label: '상담 요청 취소',
                         icon: Icons.close,
                         onTap: onCancel,
                       ),
                     ] else if (status == ConsultStatus.rejected || ended) ...[
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 16),
                       _BottomActionButton(
                         label: '챗봇으로 돌아가기',
                         onTap: onOpenChatbot,
@@ -655,62 +670,57 @@ class _WaitingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
-    decoration: BoxDecoration(
-      color: _cardCream,
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: consultBeige),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0F3E2723),
-          blurRadius: 16,
-          offset: Offset(0, 6),
-        ),
-      ],
-    ),
+    padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
+    decoration: _whiteCard,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Center(
           child: _StatusChip(icon: Icons.sensors, label: statusLabel),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 18),
         Center(
           child: Container(
-            width: 132,
-            height: 132,
+            width: 164,
+            height: 164,
             decoration: BoxDecoration(
-              color: consultMint,
+              color: _mint,
               shape: BoxShape.circle,
-              border: Border.all(color: consultGreen, width: 7),
+              border: Border.all(color: _green, width: 8),
             ),
             alignment: Alignment.center,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  dialLabel,
-                  style: const TextStyle(
-                    color: consultDeepGreen,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+            padding: const EdgeInsets.all(12),
+            // 글자 크기를 키운 기기에서도 원 안에 들어가도록 필요하면 줄인다.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    dialLabel,
+                    style: const TextStyle(
+                      color: _green,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                Text(
-                  dialValue,
-                  style: const TextStyle(
-                    color: consultDeepGreen,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w900,
-                    height: 1.2,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                  const SizedBox(height: 4),
+                  Text(
+                    dialValue,
+                    style: const TextStyle(
+                      color: _green,
+                      fontSize: 42,
+                      fontWeight: FontWeight.w900,
+                      height: 1.1,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 22),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -718,38 +728,37 @@ class _WaitingCard extends StatelessWidget {
               child: Text(
                 queueText,
                 style: const TextStyle(
-                  color: consultBrown,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+                  color: _brown,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              '${formatTime(requestedAt)} 신청',
-              style: const TextStyle(color: consultMutedBrown, fontSize: 12),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '${formatTime(requestedAt)} 신청',
+                style: const TextStyle(color: _muted, fontSize: 13),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         ClipRRect(
           borderRadius: BorderRadius.circular(999),
           child: LinearProgressIndicator(
             value: progress,
-            minHeight: 7,
-            color: consultGreen,
-            backgroundColor: consultBeige,
+            minHeight: 8,
+            color: _green,
+            backgroundColor: _mint,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
         const Text(
           '앱을 잠시 벗어나도 이 화면으로 돌아오면 진행 상황이 이어서 보여요.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: consultMutedBrown,
-            fontSize: 13,
-            height: 1.45,
-          ),
+          style: TextStyle(color: _muted, fontSize: 14, height: 1.5),
         ),
       ],
     ),
@@ -764,32 +773,34 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
     decoration: BoxDecoration(
-      color: consultMint,
+      color: _mint,
       borderRadius: BorderRadius.circular(999),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null)
-          Icon(icon, color: consultDeepGreen, size: 14)
+          Icon(icon, color: _green, size: 18)
         else
           Container(
-            width: 6,
-            height: 6,
+            width: 10,
+            height: 10,
             decoration: const BoxDecoration(
-              color: consultDeepGreen,
+              color: _green,
               shape: BoxShape.circle,
             ),
           ),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: const TextStyle(
-            color: consultDeepGreen,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: _green,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
@@ -812,37 +823,34 @@ class _ProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-    decoration: BoxDecoration(
-      color: _cardCream,
-      borderRadius: BorderRadius.circular(20),
-    ),
+    padding: const EdgeInsets.fromLTRB(20, 22, 20, 8),
+    decoration: _whiteCard,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
           '연결 진행 상황',
           style: TextStyle(
-            color: consultBrown,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
+            color: _brown,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         const _ProgressStep(
           icon: Icons.check,
           title: '상담 요청 완료',
           description: '증상과 복용 정보를 전달했어요',
           state: _StepState.done,
         ),
-        const Divider(height: 1, indent: 46, color: consultLine),
+        const Divider(height: 1, thickness: 1, color: _divider),
         _ProgressStep(
           icon: matchingDone ? Icons.check : Icons.headset_mic_outlined,
           title: '상담 가능한 약사 확인',
           description: '가장 빠른 약사를 연결하고 있어요',
           state: matchingDone ? _StepState.done : _StepState.active,
         ),
-        const Divider(height: 1, indent: 46, color: consultLine),
+        const Divider(height: 1, thickness: 1, color: _divider),
         _ProgressStep(
           icon: entryDone ? Icons.check : Icons.videocam_outlined,
           title: '화상 상담 입장',
@@ -871,23 +879,19 @@ class _ProgressStep extends StatelessWidget {
   Widget build(BuildContext context) {
     final pending = state == _StepState.pending;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       child: Row(
         children: [
           Container(
-            width: 34,
-            height: 34,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
-              color: pending ? consultLine : consultMint,
+              color: pending ? _pendingCircle : _mint,
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              icon,
-              color: pending ? consultMutedBrown : consultDeepGreen,
-              size: 18,
-            ),
+            child: Icon(icon, color: pending ? _muted : _green, size: 22),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -895,25 +899,23 @@ class _ProgressStep extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    color: pending ? consultMutedBrown : consultBrown,
-                    fontSize: 13,
-                    fontWeight: state == _StepState.active
-                        ? FontWeight.w800
-                        : FontWeight.w600,
+                    color: pending ? _muted : _brown,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   description,
-                  style: const TextStyle(
-                    color: consultMutedBrown,
-                    fontSize: 11,
-                  ),
+                  style: const TextStyle(color: _muted, fontSize: 13),
                 ),
               ],
             ),
           ),
-          if (state == _StepState.active) const _StatusChip(label: '진행 중'),
+          if (state == _StepState.active) ...[
+            const SizedBox(width: 8),
+            const _StatusChip(label: '진행 중'),
+          ],
         ],
       ),
     );
@@ -970,12 +972,11 @@ class _JoinNowButtonState extends State<_JoinNowButton>
         final t = pharmacistIn ? (1 - (_pulse.value * 2 - 1).abs()) : 0.0;
         return DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(18),
             boxShadow: [
               if (pharmacistIn)
                 BoxShadow(
-                  color: const Color(0xFFFFD54F)
-                      .withValues(alpha: 0.6 * (1 - t)),
+                  color: _yellow.withValues(alpha: 0.6 * (1 - t)),
                   spreadRadius: 8 * t,
                 ),
             ],
@@ -984,27 +985,27 @@ class _JoinNowButtonState extends State<_JoinNowButton>
         );
       },
       child: SizedBox(
-        height: 50,
-        child: FilledButton(
+        height: 60,
+        child: FilledButton.icon(
           onPressed: widget.onTap,
           style: FilledButton.styleFrom(
-            backgroundColor: pharmacistIn
-                ? const Color(0xFF3E2723)
-                : consultGreen,
-            foregroundColor: pharmacistIn
-                ? const Color(0xFFFFD54F)
-                : Colors.white,
+            backgroundColor: pharmacistIn ? _brown : _yellow,
+            foregroundColor: pharmacistIn ? _yellow : _brown,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(18),
             ),
             textStyle: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
             ),
           ),
-          child: Text(
-            pharmacistIn ? '🔔 약사가 들어왔어요 — 지금 입장하기' : '🎥 화상 상담 입장하기',
+          icon: Icon(
+            pharmacistIn
+                ? Icons.notifications_active_outlined
+                : Icons.videocam_outlined,
+            size: 24,
           ),
+          label: Text(pharmacistIn ? '약사가 들어왔어요 — 지금 입장하기' : '화상 상담 입장하기'),
         ),
       ),
     );
@@ -1018,20 +1019,16 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    decoration: BoxDecoration(
-      color: const Color(0xFFFFFDF5),
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: const Color(0xFFF1E3B8)),
-    ),
+    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+    decoration: _whiteCard,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           '📝 상담 요약',
           style: TextStyle(
-            color: Color(0xFF593D0D),
-            fontSize: 15,
+            color: _brown,
+            fontSize: 16,
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -1043,36 +1040,45 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _PrivacyNotice extends StatelessWidget {
-  const _PrivacyNotice();
+  const _PrivacyNotice({required this.preview});
+
+  final bool preview;
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
+    padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: consultMint,
-      borderRadius: BorderRadius.circular(16),
+      color: _mint,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: _privacyBorder),
     ),
-    child: const Row(
+    child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(Icons.verified_user_outlined, color: consultDeepGreen, size: 20),
-        SizedBox(width: 8),
+        const Icon(Icons.shield_outlined, color: _green, size: 24),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 '상담 내용은 안전하게 보호돼요',
                 style: TextStyle(
-                  color: consultDeepGreen,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+                  color: _green,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              SizedBox(height: 2),
+              const SizedBox(height: 4),
               Text(
-                '상담 기록은 서비스 제공 목적 외에는 사용하지 않습니다.',
-                style: TextStyle(color: consultDeepGreen, fontSize: 11),
+                preview
+                    ? '현재는 화면 시연으로 상담 기록을 수집하거나 저장하지 않아요.'
+                    : '상담 기록은 서비스 제공 목적 외에는 사용하지 않습니다.',
+                style: const TextStyle(
+                  color: _green,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
               ),
             ],
           ),
@@ -1095,15 +1101,15 @@ class _BottomActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 52,
+    height: 56,
     child: OutlinedButton(
       onPressed: onTap,
       style: OutlinedButton.styleFrom(
         backgroundColor: _dangerBackground,
         foregroundColor: _danger,
         side: const BorderSide(color: Color(0xFFF2CFC9)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,

@@ -32,6 +32,38 @@ Future<List<StockItem>> loadMachineStock(
   }
 }
 
+/// 기기 재탐색: [latitude], [longitude] 기준으로 가장 가까운 운영 자판기를 찾는다.
+/// 서버(`GET /api/v1/map/machines?lat=&lng=`)가 가까운 순으로 정렬해 준다.
+/// 주변에 자판기가 없으면 null.
+Future<VendingMachine?> findNearestMachine({
+  required double latitude,
+  required double longitude,
+  http.Client? client,
+}) async {
+  if (AppConfig.preview.value && client == null) {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    return demoConnectedMachine;
+  }
+  final api = ApiClient(client: client);
+  try {
+    final data = await api.get(
+      '/api/v1/map/machines',
+      query: {'lat': '$latitude', 'lng': '$longitude'},
+      // 무료 서버가 잠들어 있으면 첫 요청이 오래 걸린다.
+      timeout: const Duration(seconds: 70),
+    );
+    for (final item in (data['items'] as List? ?? const [])) {
+      final json = Map<String, dynamic>.from(item as Map);
+      if (json['latitude'] is num && json['longitude'] is num) {
+        return VendingMachine.fromJson(json);
+      }
+    }
+    return null;
+  } finally {
+    api.close();
+  }
+}
+
 /// 앱으로 자판기 QR을 스캔한 결과.
 class MachineScanResult {
   const MachineScanResult({required this.machine, this.approvedDrugName});
