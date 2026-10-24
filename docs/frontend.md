@@ -72,7 +72,7 @@ flutter run -d chrome --web-port 5555
 | 전자 구매 허가서 | ✅ 연결 | `GET /vending/purchases?user_id=` | 〃 |
 | QR 스캔으로 자판기 연결 | ✅ 연결 (기기 확인 완료) | `POST /vending/scan` | `data/machine_api.dart`, `qr_camera_page.dart` |
 | 통화 녹음·약사 검토 요약 | ❌ 미연결 | `/consultations/{cid}/session`, `/audio`, `/summary` | 없음 |
-| 로그인·회원가입 | ✅ 연결 (실제 계정·기기 검증 필요) | `POST /auth/login`, `POST /auth/signup`, `GET /auth/username-available` | `data/auth_api.dart`, `data/auth_session.dart` |
+| 로그인·회원가입 | ✅ 연결 (실제 계정·기기 검증 필요) | `POST /auth/login` 응답 사용자 이름을 마이페이지에 표시, 회원가입 `POST /auth/signup`에 `name` 전송, `GET /auth/username-available` | `data/auth_api.dart`, `data/auth_session.dart`, `screens/signup_name_screen.dart` |
 
 공통 규칙 (`data/api_client.dart`):
 
@@ -179,7 +179,7 @@ flutter build apk --release --split-per-abi --dart-define=API_BASE_URL=https://m
 
 - **실제 화상 통화 검증:** 폰 앱과 약사 웹(`/pharmacist`)으로 같은 상담에 입장해 영상·음성·채팅·종료를 확인해야 합니다.
 - **통화 녹음·약사 검토 요약** 연동
-- **카메라 미리보기 오류:** 권한 창이 뜰 때 카메라를 끄면서 처리되지 않은 오류가 로그에 남고, 권한 허용 직후 미리보기가 꺼진 상태로 보입니다(다시 누르면 켜짐). `widgets/device_camera_preview.dart`
+- **카메라·통화 수명 주기 실기기 재검증:** 2026-10-21 카메라 초기화·해제 순서와 권한 창 처리를 보완하고 Daily를 0.41.0으로 갱신했습니다. 자동 회귀 테스트는 통과했으며, S23에서 권한 허용·통화 퇴장·재입장을 반복 확인해야 합니다. [수정 내용](daily-integration.md#2026-10-21-오류-대응)
 - **화면 배치 다듬기:** 실제 기기(갤럭시 S23)에서 조정이 필요한 부분이 있습니다.
 - **카카오 지도 키:** 앱의 키와 서버(`/api/v1/map/config`)의 키가 서로 다릅니다. 하나로 통일하는 것이 좋습니다.
 - **지도 '길찾기' 링크:** 외부 링크를 열려면 `url_launcher` 패키지가 필요합니다.

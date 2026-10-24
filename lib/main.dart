@@ -243,7 +243,7 @@ class _AppShellState extends State<AppShell> {
         _consultClosed = false;
         _consultFromChatbot = fromChatbot;
         if (AppConfig.preview.value) {
-          AppSession.instance.startConsultation(direct: !fromChatbot);
+          AppSession.instance.cancelConsultation();
         } else {
           AppSession.instance.clearCallRoom();
           AppSession.instance.cancelConsultation();
@@ -286,12 +286,24 @@ class _AppShellState extends State<AppShell> {
     setState(() => _isScanningDevices = true);
     try {
       final results = await Future.wait([
-        _scanPosition().then(
-          (position) => findNearestMachine(
+        _scanPosition().then((position) {
+          if (!mounted) return null;
+          if (position == null && !AppConfig.preview.value) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  '현재 위치를 확인하지 못해 기본 위치 기준으로 검색해요.',
+                  style: TextStyle(fontSize: 12),
+                ),
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+          return findNearestMachine(
             latitude: position?.latitude ?? _defaultScanLatitude,
             longitude: position?.longitude ?? _defaultScanLongitude,
-          ),
-        ),
+          );
+        }),
         // 탐색 중 안내가 너무 짧게 스쳐 가지 않도록 최소 시간을 둔다.
         Future<void>.delayed(const Duration(milliseconds: 1500)),
       ]);
@@ -450,6 +462,8 @@ class _AppShellState extends State<AppShell> {
       if (_consultSession > 0)
         ConsultationScreen(
           key: ValueKey(_consultSession),
+          isActive: selectedIndex == 2,
+          onOpenConsultation: () => setState(() => selectedIndex = 2),
           room: AppSession.instance.callRoom,
           chat: AppSession.instance.callChat,
           direct: !_consultFromChatbot,

@@ -35,7 +35,12 @@ class ApiClient {
         .get(
           uri(path, query),
           headers: {
-            ...((path.startsWith('/auth/') && path != '/auth/me')
+            ...((const {
+                  '/auth/login',
+                  '/auth/signup',
+                  '/auth/username-available',
+                  '/auth/status',
+                }.contains(path))
                 ? <String, String>{}
                 : AuthSession.headers()),
             ...?headers,
@@ -53,7 +58,12 @@ class ApiClient {
         .post(
           uri(path),
           headers: {
-            ...((path.startsWith('/auth/') && path != '/auth/me')
+            ...((const {
+                  '/auth/login',
+                  '/auth/signup',
+                  '/auth/username-available',
+                  '/auth/status',
+                }.contains(path))
                 ? <String, String>{}
                 : AuthSession.headers()),
             if (body != null) 'Content-Type': 'application/json',
@@ -61,6 +71,19 @@ class ApiClient {
           body: body == null ? null : jsonEncode(body),
         )
         .timeout(timeout),
+  );
+
+  Future<dynamic> patch(String path, {required Object body}) async => _decode(
+    await _client
+        .patch(
+          uri(path),
+          headers: {
+            ...AuthSession.headers(),
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 20)),
   );
 
   /// 서버는 실패 시 `{"detail": "한국어 메시지"}`를 준다.

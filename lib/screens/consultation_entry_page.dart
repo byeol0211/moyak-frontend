@@ -32,7 +32,6 @@ class ConsultationEntryPage extends StatefulWidget {
 class _ConsultationEntryPageState extends State<ConsultationEntryPage> {
   final _camera = CameraPreviewHandle();
   bool _entering = false;
-  bool _speakerOn = true;
 
   Future<void> _enter([CallRoom? testRoom]) async {
     if (_entering) return;
@@ -132,12 +131,6 @@ class _ConsultationEntryPageState extends State<ConsultationEntryPage> {
     super.dispose();
   }
 
-  void _toggleSpeaker(bool enabled) {
-    setState(() => _speakerOn = enabled);
-    // 켤 때 짧은 소리로 스피커를 확인한다.
-    if (enabled) SystemSound.play(SystemSoundType.click);
-  }
-
   @override
   Widget build(BuildContext context) {
     final preview = AppConfig.preview.value;
@@ -203,12 +196,10 @@ class _ConsultationEntryPageState extends State<ConsultationEntryPage> {
                         onChanged: _camera.busy ? null : _camera.setMicrophone,
                       ),
                       const SizedBox(height: 12),
-                      _DeviceToggleCard(
-                        icon: Icons.volume_up_outlined,
-                        title: '스피커',
-                        status: state(_speakerOn),
-                        value: _speakerOn,
-                        onChanged: _toggleSpeaker,
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.volume_up_outlined),
+                        label: const Text('스피커 테스트'),
+                        onPressed: () => SystemSound.play(SystemSoundType.click),
                       ),
                       const SizedBox(height: 20),
                       _PharmacistRoomRow(

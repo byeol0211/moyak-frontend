@@ -30,17 +30,14 @@ const _privacyBorder = Color(0xFFDBE5DC);
 const _danger = Color(0xFFC94C43);
 const _dangerBackground = Color(0xFFFBE7E4);
 
-/// 약사 상담 흐름: 연결 대기 → 화상 상담 입장.
-///
-/// - 하단 "상담하기"로 들어오면([direct]) 화상방이 준비되는 즉시 입장 화면으로 넘어간다.
-/// - 챗봇의 "약사에게 바로 상담하기"로 들어오면 대기 화면에 머물며 입장 버튼을 보여준다.
-/// - [record]를 주면 지난 상담의 결과(처방 완료·거절)를 보여준다.
-/// - 미리보기가 아니면 백엔드 상담 API로 요청·상태 확인·취소를 한다.
+/// 요청 전 확인 → 명시적 요청 → 약사 실제 입장 대기 → 영상 상담.
 class ConsultationScreen extends StatefulWidget {
   const ConsultationScreen({
     required this.onScanQr,
     required this.onOpenChatbot,
     this.direct = true,
+    this.isActive = true,
+    this.onOpenConsultation,
     this.record,
     this.room,
     this.chat,
@@ -60,6 +57,8 @@ class ConsultationScreen extends StatefulWidget {
   /// 상담 요청 취소, "챗봇으로 돌아가기" 후 이동할 곳.
   final VoidCallback onOpenChatbot;
   final bool direct;
+  final bool isActive;
+  final VoidCallback? onOpenConsultation;
   final ConsultRecord? record;
   final CallRoom? room;
   final ConsultationChat? chat;
@@ -81,6 +80,10 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
   late final ConsultationApi _api = widget.api ?? ConsultationApi();
   ConsultationSnapshot? _snapshot;
   bool _requesting = false;
+  bool _requested = false;
+  bool _cancelling = false;
+  int _requestGeneration = 0;
+  bool _entryNotified = false;
   String? _requestError;
   bool _polling = false;
 
@@ -99,36 +102,61 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
   @override
   void initState() {
     super.initState();
+    _requested = widget.record != null;
+  }
+
+  @override
+  void didUpdateWidget(covariant ConsultationScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _notifyEntry());
+    }
+  }
+
+  void _notifyEntry() {
+    if (!mounted ||
+        (!widget.isActive && widget.onOpenConsultation == null) ||
+        !_pharmacistIn ||
+        _entryNotified ||
+        _showingEntry) {
+      return;
+    }
+    _entryNotified = true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('약사가 상담방에 입장했어요. 입장 버튼을 눌러주세요.'),
+        duration: const Duration(seconds: 5),
+        action: widget.onOpenConsultation == null
+            ? null
+            : SnackBarAction(
+                label: '상담 화면',
+                onPressed: widget.onOpenConsultation!,
+              ),
+      ),
+    );
+  }
+
+  void _beginRequest() {
+    if (_requesting || _requested) return;
+    setState(() {
+      _requested = true;
+      _requestGeneration++;
+      _requestedAt = DateTime.now();
+    });
     if (_live) {
       _requestConsultation();
       return;
     }
-    if (widget.room != null) {
-      _roomReady = true;
-      _showingEntry = widget.direct;
-      return;
-    }
     if (!AppConfig.preview.value) return;
-    if (_status != ConsultStatus.pending || _record?.endedAt != null) return;
+    AppSession.instance.startConsultation(direct: widget.direct);
     _startClock();
-    if (_roomReady) {
-      _schedulePharmacistJoin();
-    } else {
-      _timers.add(
-        Timer(_roomReadyDelay, () {
-          if (!mounted ||
-              _status != ConsultStatus.pending ||
-              _record?.endedAt != null) {
-            return;
-          }
-          setState(() {
-            _roomReady = true;
-            _showingEntry = widget.direct;
-          });
-          _schedulePharmacistJoin();
-        }),
-      );
-    }
+    _timers.add(
+      Timer(_roomReadyDelay, () {
+        if (!mounted) return;
+        setState(() => _roomReady = true);
+        _schedulePharmacistJoin();
+      }),
+    );
   }
 
   void _startClock() {
@@ -145,7 +173,10 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
 
   void _schedulePharmacistJoin() => _timers.add(
     Timer(_pharmacistJoinDelay, () {
-      if (mounted) setState(() => _pharmacistIn = true);
+      if (mounted) {
+        setState(() => _pharmacistIn = true);
+        _notifyEntry();
+      }
     }),
   );
 
@@ -158,6 +189,7 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
 
   /// 진행 중인 상담이 있으면 이어서 보고, 없으면 새로 요청한다.
   Future<void> _requestConsultation() async {
+    final generation = _requestGeneration;
     final userId = AppSession.instance.userId;
     if (userId == null) {
       setState(() => _requestError = '사용자 정보를 확인하지 못했어요. 다시 로그인해주세요.');
@@ -172,7 +204,7 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
         userId: userId,
         chatSummary: widget.direct ? '' : AppSession.instance.chatSummary,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _requestGeneration) return;
       _applySnapshot(snapshot, first: true);
       if (!snapshot.cancelled &&
           (!snapshot.finished || snapshot.record.summary == null)) {
@@ -222,21 +254,18 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
     if (roomUrl != null && !_roomReady) {
       setState(() {
         _roomReady = true;
-        // 하단 "상담하기"로 들어왔으면 대기 화면을 건너뛰고 바로 입장 화면으로 간다.
-        if (first && widget.direct && _status == ConsultStatus.pending) {
-          _showingEntry = true;
-        }
       });
     }
   }
 
   Future<void> _poll() async {
     final current = _snapshot;
-    if (current == null || _polling) return;
+    final generation = _requestGeneration;
+    if (current == null || _polling || _cancelling) return;
     _polling = true;
     try {
       final next = await _api.get(current.id);
-      if (!mounted) return;
+      if (!mounted || _cancelling || generation != _requestGeneration) return;
       _applySnapshot(next);
       if (next.cancelled || (next.finished && next.record.summary != null)) {
         _stopTimers();
@@ -246,11 +275,13 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
           next.roomUrl != null &&
           next.record.summary == null) {
         final inRoom = await _api.pharmacistInRoom(next.id);
-        if (mounted && inRoom != null && inRoom != _pharmacistIn) {
-          setState(() => _pharmacistIn = inRoom);
+        if (mounted && !_cancelling && generation == _requestGeneration) {
+          setState(() => _pharmacistIn = inRoom == true);
+          _notifyEntry();
         }
       }
     } catch (_) {
+      if (mounted) setState(() => _pharmacistIn = false);
       // 네트워크가 잠깐 끊긴 경우 다음 확인 때 다시 시도한다.
     } finally {
       _polling = false;
@@ -261,8 +292,19 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
     _stopTimers();
     AppSession.instance.clearCallRoom();
     AppSession.instance.cancelConsultation();
-    widget.onClosed?.call();
-    widget.onOpenChatbot();
+    setState(() {
+      _requestGeneration++;
+      _requested = false;
+      _snapshot = null;
+      _previewRecord = null;
+      _roomReady = false;
+      _pharmacistIn = false;
+      _entryNotified = false;
+      _showingEntry = false;
+      _leftCall = false;
+      _requestError = null;
+      _elapsed = Duration.zero;
+    });
   }
 
   @override
@@ -273,6 +315,16 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
   }
 
   Future<void> _confirmCancel() async {
+    if (_cancelling || _requesting) return;
+    setState(() => _cancelling = true);
+    try {
+      await _cancelConfirmed();
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
+    }
+  }
+
+  Future<void> _cancelConfirmed() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -334,10 +386,7 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
         return;
       }
     }
-    _stopTimers();
-    AppSession.instance.cancelConsultation();
-    widget.onClosed?.call();
-    widget.onOpenChatbot();
+    _closeLive();
   }
 
   /// 환자가 통화를 나가면 서버 종료 없이 결과 대기 화면으로 돌아온다.
@@ -369,10 +418,11 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
   @override
   Widget build(BuildContext context) {
     // 실제 모드에서 상담이 만들어지기 전: 요청 중이거나 실패한 상태를 보여준다.
-    final waitingForServer = _live && _snapshot == null;
+    final waitingForServer = _requested && _live && _snapshot == null;
     return Column(
       children: [
-        if (AppConfig.preview.value &&
+        if (_requested &&
+            AppConfig.preview.value &&
             widget.record == null &&
             widget.room == null)
           Material(
@@ -422,20 +472,24 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
         Expanded(
           child: _showingEntry
               ? ConsultationEntryPage(
-                  room: widget.room,
-                  chat: widget.chat,
+                  room: widget.room ?? AppSession.instance.callRoom,
+                  chat: widget.chat ?? AppSession.instance.callChat,
                   onBack: () => setState(() => _showingEntry = false),
                   onScanQr: widget.onScanQr,
                   onEnd: _handleCallEnded,
                 )
               : _PharmacistWaitingView(
+                  requested: _requested,
+                  onRequest: _beginRequest,
                   status: _status,
                   record: _record,
                   requestedAt: _requestedAt,
                   elapsed: _elapsed,
                   roomReady: _roomReady,
                   pharmacistIn: _pharmacistIn,
-                  notice: !waitingForServer
+                  notice: !_requested
+                      ? ('약사 상담을 요청해보세요', '가운데 버튼을 누르면 상담 요청이 전달돼요.')
+                      : !waitingForServer
                       ? (_leftCall && _record?.summary == null
                             ? (
                                 '상담 결과를 기다리고 있어요',
@@ -448,9 +502,11 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
                   onRetry: waitingForServer && _requestError != null
                       ? _requestConsultation
                       : null,
-                  requesting: _requesting,
+                  requesting: _requesting || _cancelling,
                   onScanQr: widget.onScanQr,
-                  onJoin: () => setState(() => _showingEntry = true),
+                  onJoin: () {
+                    if (_pharmacistIn) setState(() => _showingEntry = true);
+                  },
                   onCancel: _confirmCancel,
                   onOpenChatbot: widget.onOpenChatbot,
                 ),
@@ -485,12 +541,16 @@ class _PharmacistWaitingView extends StatelessWidget {
     required this.onJoin,
     required this.onCancel,
     required this.onOpenChatbot,
+    required this.requested,
+    required this.onRequest,
     this.notice,
     this.onRetry,
     this.requesting = false,
   });
 
   /// 상담이 만들어지기 전 안내(제목, 내용). 있으면 상태 문구 대신 보여준다.
+  final bool requested;
+  final VoidCallback onRequest;
   final (String, String)? notice;
   final VoidCallback? onRetry;
   final bool requesting;
@@ -515,13 +575,16 @@ class _PharmacistWaitingView extends StatelessWidget {
     final preview = AppConfig.preview.value;
     final summary = record?.summary;
     final ended = record?.endedAt != null;
-    final waiting = status == ConsultStatus.pending && !ended;
+    final waiting = requested && status == ConsultStatus.pending && !ended;
     final (statusLabel, queueText) = notice != null
         ? notice!
         : ended && status == ConsultStatus.pending
         ? ('상담이 종료되었어요', '상담 내역에서 결과를 확인해주세요.')
         : switch (status) {
-            ConsultStatus.pending => ('약사를 찾고 있어요', '약사 연결을 기다리는 중이에요'),
+            ConsultStatus.pending =>
+              pharmacistIn
+                  ? ('약사가 입장했어요', '아래 입장 버튼으로 상담을 시작하세요')
+                  : ('약사 입장을 기다리고 있어요', '약사 연결을 기다리는 중이에요'),
             ConsultStatus.approved => (
               '약사가 처방을 완료했어요',
               '처방약: ${record?.approvedDrugName ?? '-'}',
@@ -562,10 +625,28 @@ class _PharmacistWaitingView extends StatelessWidget {
                     ],
                     _WaitingCard(
                       statusLabel: '$statusLabel$example',
-                      dialLabel: waiting
+                      onDialTap: requesting
+                          ? null
+                          : !requested
+                          ? onRequest
+                          : onRetry ?? (waiting ? onCancel : null),
+                      actionLabel: requesting
+                          ? '처리 중...'
+                          : !requested
+                          ? '상담 요청하기'
+                          : onRetry != null
+                          ? '다시 요청하기'
+                          : waiting
+                          ? '상담 요청 취소'
+                          : null,
+                      dialLabel: !requested
+                          ? '약사 상담'
+                          : waiting
                           ? '대기 시간${example.isEmpty ? '' : ' 예시'}'
                           : '상담',
-                      dialValue: ended
+                      dialValue: !requested
+                          ? '시작'
+                          : ended
                           ? '종료'
                           : switch (status) {
                               ConsultStatus.pending => _elapsedLabel,
@@ -573,16 +654,25 @@ class _PharmacistWaitingView extends StatelessWidget {
                               ConsultStatus.rejected => '종료',
                             },
                       queueText: queueText,
-                      requestedAt: requestedAt,
-                      progress: status == ConsultStatus.pending ? 0.66 : 1,
+                      requestedAt: requested ? requestedAt : null,
+                      progress: !requested
+                          ? 0
+                          : status == ConsultStatus.pending
+                          ? 0.66
+                          : 1,
                     ),
                     const SizedBox(height: 16),
-                    _ProgressCard(
-                      matchingDone: status != ConsultStatus.pending,
-                      entryDone: status == ConsultStatus.approved,
-                      entryDescription: step3Description,
-                    ),
-                    if (notice == null && waiting && roomReady) ...[
+                    if (requested)
+                      _ProgressCard(
+                        matchingDone:
+                            pharmacistIn || status != ConsultStatus.pending,
+                        entryDone: status == ConsultStatus.approved,
+                        entryDescription: step3Description,
+                      ),
+                    if (notice == null &&
+                        waiting &&
+                        roomReady &&
+                        pharmacistIn) ...[
                       const SizedBox(height: 20),
                       _JoinNowButton(pharmacistIn: pharmacistIn, onTap: onJoin),
                     ],
@@ -604,36 +694,7 @@ class _PharmacistWaitingView extends StatelessWidget {
                     ],
                     const SizedBox(height: 16),
                     _PrivacyNotice(preview: preview),
-                    if (onRetry != null) ...[
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 56,
-                        child: FilledButton.icon(
-                          onPressed: requesting ? null : onRetry,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _green,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            textStyle: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('다시 요청하기'),
-                        ),
-                      ),
-                    ],
-                    if (waiting) ...[
-                      const SizedBox(height: 16),
-                      _BottomActionButton(
-                        label: '상담 요청 취소',
-                        icon: Icons.close,
-                        onTap: onCancel,
-                      ),
-                    ] else if (status == ConsultStatus.rejected || ended) ...[
+                    if (status == ConsultStatus.rejected || ended) ...[
                       const SizedBox(height: 16),
                       _BottomActionButton(
                         label: '챗봇으로 돌아가기',
@@ -659,13 +720,17 @@ class _WaitingCard extends StatelessWidget {
     required this.queueText,
     required this.requestedAt,
     required this.progress,
+    this.onDialTap,
+    this.actionLabel,
   });
 
   final String statusLabel;
   final String dialLabel;
   final String dialValue;
   final String queueText;
-  final DateTime requestedAt;
+  final DateTime? requestedAt;
+  final VoidCallback? onDialTap;
+  final String? actionLabel;
   final double progress;
 
   @override
@@ -680,42 +745,60 @@ class _WaitingCard extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         Center(
-          child: Container(
-            width: 164,
-            height: 164,
-            decoration: BoxDecoration(
-              color: _mint,
-              shape: BoxShape.circle,
-              border: Border.all(color: _green, width: 8),
-            ),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.all(12),
-            // 글자 크기를 키운 기기에서도 원 안에 들어가도록 필요하면 줄인다.
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    dialLabel,
-                    style: const TextStyle(
-                      color: _green,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onDialTap,
+              customBorder: const CircleBorder(),
+              child: Container(
+                width: 164,
+                height: 164,
+                decoration: BoxDecoration(
+                  color: _mint,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _green, width: 8),
+                ),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.all(12),
+                // 글자 크기를 키운 기기에서도 원 안에 들어가도록 필요하면 줄인다.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        dialLabel,
+                        style: const TextStyle(
+                          color: _green,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        dialValue,
+                        style: const TextStyle(
+                          color: _green,
+                          fontSize: 42,
+                          fontWeight: FontWeight.w900,
+                          height: 1.1,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      if (actionLabel != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          actionLabel!,
+                          style: const TextStyle(
+                            color: _green,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    dialValue,
-                    style: const TextStyle(
-                      color: _green,
-                      fontSize: 42,
-                      fontWeight: FontWeight.w900,
-                      height: 1.1,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -738,7 +821,7 @@ class _WaitingCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
-                '${formatTime(requestedAt)} 신청',
+                requestedAt == null ? '요청 전' : '${formatTime(requestedAt!)} 신청',
                 style: const TextStyle(color: _muted, fontSize: 13),
               ),
             ),
@@ -1089,14 +1172,9 @@ class _PrivacyNotice extends StatelessWidget {
 }
 
 class _BottomActionButton extends StatelessWidget {
-  const _BottomActionButton({
-    required this.label,
-    required this.onTap,
-    this.icon,
-  });
+  const _BottomActionButton({required this.label, required this.onTap});
 
   final String label;
-  final IconData? icon;
   final VoidCallback onTap;
 
   @override
@@ -1113,10 +1191,7 @@ class _BottomActionButton extends StatelessWidget {
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (icon != null) ...[Icon(icon, size: 20), const SizedBox(width: 6)],
-          Text(label),
-        ],
+        children: [Text(label)],
       ),
     ),
   );

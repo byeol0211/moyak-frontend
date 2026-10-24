@@ -42,6 +42,8 @@ Future<void> _pumpPhone(WidgetTester tester, Widget child) async {
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(MaterialApp(home: Scaffold(body: child)));
+  await tester.tap(find.text('상담 요청하기'));
+  await tester.pump();
 }
 
 void main() {
@@ -106,7 +108,7 @@ void main() {
         onOpenChatbot: () {},
       ),
     );
-    expect(find.text('상담을 요청하고 있어요'), findsOneWidget);
+
     await tester.pump();
     await tester.pump();
 
@@ -115,7 +117,7 @@ void main() {
       'chat_summary': '사용자: 머리가 아파요\n모약이: 타이레놀을 참고하세요',
     });
     expect(find.text('약사 연결을 기다리는 중이에요'), findsOneWidget);
-    expect(find.text('화상 상담 입장하기'), findsOneWidget);
+    expect(find.text('화상 상담 입장하기'), findsNothing);
     expect(AppSession.instance.callConsultationId, 'c-1');
 
     // 3초 후 상태 확인: 약사가 화상방에 들어왔다
@@ -178,43 +180,45 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('cancel calls the server and returns to the chatbot', (
-    tester,
-  ) async {
-    var cancelled = false;
-    var openedChatbot = false;
-    final client = MockClient((request) async {
-      final path = request.url.path;
-      if (path == '/consultations' && request.method == 'GET') {
-        return _json([]);
-      }
-      if (path == '/consultations/c-1/cancel') {
-        cancelled = true;
-        return _json(_consultation(status: 'cancelled'));
-      }
-      return _json(_consultation(roomUrl: null));
-    });
-    await _pumpPhone(
-      tester,
-      ConsultationScreen(
-        direct: false,
-        api: ConsultationApi(client: client),
-        onScanQr: () {},
-        onOpenChatbot: () => openedChatbot = true,
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
-    await tester.scrollUntilVisible(find.text('상담 요청 취소'), 200);
-    await tester.tap(find.text('상담 요청 취소'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('요청 취소'));
-    await tester.pump();
-    await tester.pump();
-    expect(cancelled, isTrue);
-    expect(openedChatbot, isTrue);
-    await tester.pumpWidget(const SizedBox());
-  });
+  testWidgets(
+    'timer cancel calls server then returns to idle on the same screen',
+    (tester) async {
+      var cancelled = false;
+      var openedChatbot = false;
+      final client = MockClient((request) async {
+        final path = request.url.path;
+        if (path == '/consultations' && request.method == 'GET') {
+          return _json([]);
+        }
+        if (path == '/consultations/c-1/cancel') {
+          cancelled = true;
+          return _json(_consultation(status: 'cancelled'));
+        }
+        return _json(_consultation(roomUrl: null));
+      });
+      await _pumpPhone(
+        tester,
+        ConsultationScreen(
+          direct: false,
+          api: ConsultationApi(client: client),
+          onScanQr: () {},
+          onOpenChatbot: () => openedChatbot = true,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.scrollUntilVisible(find.text('상담 요청 취소'), 200);
+      await tester.tap(find.text('상담 요청 취소'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('요청 취소'));
+      await tester.pump();
+      await tester.pump();
+      expect(cancelled, isTrue);
+      expect(openedChatbot, isFalse);
+      expect(find.text('상담 요청하기'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('shows the server error and retries', (tester) async {
     var fail = true;
@@ -248,6 +252,50 @@ void main() {
     expect(find.text('약사 연결을 기다리는 중이에요'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+    'does not contact the server before explicit request; patient-only presence stays waiting',
+    (tester) async {
+      var requests = 0;
+      final client = MockClient((request) async {
+        requests++;
+        if (request.url.path.endsWith('/presence'))
+          return _json({
+            'available': true,
+            'participants': 1,
+            'pharmacist_in_room': false,
+          });
+        if (request.url.path == '/consultations' && request.method == 'GET')
+          return _json([]);
+        return _json(_consultation());
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ConsultationScreen(
+              api: ConsultationApi(client: client),
+              onScanQr: () {},
+              onOpenChatbot: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 10));
+      expect(requests, 0);
+      expect(find.text('상담 요청하기'), findsOneWidget);
+      await tester.tap(find.text('상담 요청하기'));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+      await tester.pump();
+      expect(requests, greaterThan(0));
+      expect(find.text('약사 입장을 기다리고 있어요'), findsOneWidget);
+      expect(find.text('약사가 들어왔어요 — 지금 입장하기'), findsNothing);
+      expect(find.text('화상 상담 입장하기'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   test('loads history without cancelled ones and maps permits', () async {
     final client = MockClient((request) async {

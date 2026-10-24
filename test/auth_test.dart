@@ -11,6 +11,7 @@ import 'package:moyak/data/api_client.dart';
 import 'package:moyak/data/app_session.dart';
 import 'package:moyak/config/app_config.dart';
 import 'package:moyak/screens/login_page.dart';
+import 'package:moyak/screens/mypage.dart';
 import 'package:moyak/screens/screen_flows.dart';
 import 'package:moyak/calls/consultation_chat.dart';
 
@@ -23,7 +24,12 @@ Map<String, Object> session() => {
   'access_token': 'test-token',
   'token_type': 'bearer',
   'expires_in': 3600,
-  'user': {'id': 'server-user', 'username': 'tester', 'role': 'user'},
+  'user': {
+    'id': 'server-user',
+    'username': 'tester',
+    'name': '홍길동',
+    'role': 'user',
+  },
 };
 void main() {
   setUp(() {
@@ -31,8 +37,30 @@ void main() {
     AuthSession.clear();
     AppConfig.preview.value = false;
     AppSession.instance.userId = null;
+    AppSession.instance.userName = null;
+    AppSession.instance.username = null;
+    AppSession.instance.userName = null;
+    AppSession.instance.username = null;
   });
   tearDown(AuthSession.clear);
+  test('signup rejects an empty name before making a request', () async {
+    final auth = AuthApi(
+      client: MockClient((_) async {
+        fail('An empty name must not be sent to the API.');
+      }),
+    );
+
+    await expectLater(
+      auth.signup('tester', 'Password1!', name: '  '),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.message,
+          'message',
+          '이름을 입력해주세요.',
+        ),
+      ),
+    );
+  });
   test(
     'duplicate signup and malformed response do not replace session',
     () async {
@@ -45,7 +73,7 @@ void main() {
         }),
       );
       await expectLater(
-        duplicate.signup('tester', 'Password1!'),
+        duplicate.signup('tester', 'Password1!', name: '홍길동'),
         throwsA(
           isA<ApiException>().having(
             (error) => error.message,
@@ -84,6 +112,9 @@ void main() {
       });
       await AuthApi(client: client).login(' tester ', 'Password1!');
       expect(AppSession.instance.userId, 'server-user');
+      expect(AppSession.instance.userName, '홍길동');
+      expect(AppSession.instance.username, 'tester');
+      expect(AppSession.instance.displayName, '홍길동');
       expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);
       await ApiClient(client: client).get('/consultations');
       await AppSession.instance.logout();
@@ -161,41 +192,100 @@ void main() {
     await tester.pumpAndSettle();
     expect(entered, isTrue);
     expect(AppSession.instance.userId, 'server-user');
+    expect(AppSession.instance.displayName, '홍길동');
   });
-  testWidgets(
-    'signup checks username and submits password without pretending identity verification',
-    (tester) async {
-      var entered = false;
-      final auth = AuthApi(
-        client: MockClient((request) async {
-          if (request.url.path.endsWith('username-available')) {
-            return json({'available': true});
-          }
-          expect(request.url.path, '/auth/signup');
-          expect(jsonDecode(request.body), {
-            'username': 'tester',
-            'password': 'Password1!',
-          });
-          return json(session(), 201);
-        }),
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          home: SignupFlow(auth: auth, onComplete: () => entered = true),
+  testWidgets('mypage displays the name returned by login', (tester) async {
+    await AuthApi(client: MockClient((_) async => json(session())))
+        .login('tester', 'Password1!');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Mypage(
+            onOpenConsultHistory: () {},
+            onOpenPermit: () {},
+            onOpenInventory: () {},
+          ),
         ),
-      );
-      await tester.enterText(find.byType(TextField).first, 'tester');
-      await tester.tap(find.text('중복확인'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('다음'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField).at(0), 'Password1!');
-      await tester.enterText(find.byType(TextField).at(1), 'Password1!');
-      await tester.pump();
-      await tester.tap(find.text('다음'));
-      await tester.pumpAndSettle();
-      expect(entered, isTrue);
-      expect(AppSession.instance.userId, 'server-user');
-    },
-  );
+      ),
+    );
+
+    expect(find.text('홍길동'), findsOneWidget);
+  });
+  testWidgets('signup saves name then mypage shows it', (tester) async {
+    var entered = false;
+    final auth = AuthApi(
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('username-available'))
+          return json({'available': true});
+        expect(request.url.path, '/auth/signup');
+        expect(jsonDecode(request.body), {
+          'username': 'tester',
+          'password': 'Password1!',
+          'name': '홍길동',
+        });
+        return json(session(), 201);
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SignupFlow(auth: auth, onComplete: () => entered = true),
+      ),
+    );
+    await tester.enterText(find.byKey(const Key('signup-name')), '홍길동');
+    await tester.enterText(find.byKey(const Key('signup-username')), 'tester');
+    await tester.ensureVisible(find.text('중복확인'));
+    await tester.tap(find.text('중복확인'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('signup-password')),
+      'Password1!',
+    );
+    await tester.enterText(
+      find.byKey(const Key('signup-confirm')),
+      'Password1!',
+    );
+    await tester.ensureVisible(find.widgetWithText(FilledButton, '회원가입'));
+    await tester.tap(find.widgetWithText(FilledButton, '회원가입'));
+    await tester.pumpAndSettle();
+    expect(entered, isTrue);
+    expect(AppSession.instance.displayName, '홍길동');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Mypage(
+            onOpenConsultHistory: () {},
+            onOpenPermit: () {},
+            onOpenInventory: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('홍길동'), findsOneWidget);
+    await AppSession.instance.logout();
+    expect(AppSession.instance.userName, isNull);
+    expect(AppSession.instance.username, isNull);
+  });
+
+  testWidgets('blank name cannot submit signup', (tester) async {
+    var calls = 0;
+    final auth = AuthApi(
+      client: MockClient((request) async {
+        calls++;
+        return json(session(), 201);
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SignupFlow(auth: auth, onComplete: () {}),
+      ),
+    );
+    await tester.ensureVisible(find.widgetWithText(FilledButton, '회원가입'));
+    await tester.tap(find.widgetWithText(FilledButton, '회원가입'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('signup-name')));
+    expect(find.text('이름을 입력해주세요.'), findsOneWidget);
+    expect(calls, 0);
+  });
 }

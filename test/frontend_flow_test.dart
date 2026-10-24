@@ -113,6 +113,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('상담하기'));
     await tester.pump();
+    await tester.tap(find.text('상담 요청하기'));
+    await tester.pump();
     await tester.tap(find.byType(DropdownButton<ConsultStatus>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('승인').last);
@@ -170,19 +172,29 @@ void main() {
     expect(continued, isTrue);
   });
 
-  testWidgets('signup preview supports backward navigation', (tester) async {
+  testWidgets('signup is one ordered scrollable form and retains input', (
+    tester,
+  ) async {
     await phone(tester, SignupFlow(onComplete: () {}));
+    await tester.enterText(find.byKey(const Key('signup-name')), '홍길동');
+    expect(
+      tester.getTopLeft(find.byKey(const Key('signup-name'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('signup-username'))).dy),
+    );
+    await tester.enterText(
+      find.byKey(const Key('signup-username')),
+      'moyak_user',
+    );
+    await tester.ensureVisible(find.text('가입 화면 미리보기 시작'));
     await tester.tap(find.text('가입 화면 미리보기 시작'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, 'moyak_user');
+    await tester.ensureVisible(find.text('중복확인'));
     await tester.tap(find.text('중복확인'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('다음').first);
-    await tester.pumpAndSettle();
-    expect(find.text('비밀번호 확인'), findsOneWidget);
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    expect(find.text('사용하실 아이디를 입력해주세요'), findsOneWidget);
+    expect(find.text('사용 가능한 아이디입니다.'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('signup-name')));
+    expect(find.text('홍길동'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('login validates empty fields and explicitly enters preview', (
@@ -232,15 +244,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('상담하기'));
     await tester.pump();
+    await tester.tap(find.text('상담 요청하기'));
+    await tester.pump();
     await tester.pump(const Duration(seconds: 3));
     final id = AppSession.instance.consultation!.id;
-    expect(find.text('입장 전 화면과 소리를 확인해 주세요'), findsOneWidget);
+    expect(find.textContaining('약사 입장을 기다리고 있어요'), findsOneWidget);
     await tester.tap(find.text('모약이'));
     await tester.pump();
     await tester.tap(find.text('상담하기'));
     await tester.pump();
     expect(AppSession.instance.consultation!.id, id);
-    expect(find.text('입장 전 화면과 소리를 확인해 주세요'), findsOneWidget);
+    expect(find.textContaining('약사 입장을 기다리고 있어요'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 

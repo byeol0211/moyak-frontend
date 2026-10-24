@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -7,6 +9,14 @@ import 'package:flutter/scheduler.dart';
 ///
 /// Local preview only; no video is recorded or sent to a server.
 class CameraPreviewHandle extends ChangeNotifier {
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   Future<void> Function()? _stop;
   Future<void> Function(bool)? _setCamera;
   Future<void> Function(bool)? _setMicrophone;
@@ -35,6 +45,7 @@ class CameraPreviewHandle extends ChangeNotifier {
     required bool busy,
     required String? error,
   }) {
+    if (_disposed) return;
     if (_cameraEnabled == cameraEnabled &&
         _microphoneEnabled == microphoneEnabled &&
         _busy == busy &&
@@ -48,7 +59,9 @@ class CameraPreviewHandle extends ChangeNotifier {
     // 빌드 중에 바뀌면(화면 전환 등) 다음 프레임에 알린다.
     if (SchedulerBinding.instance.schedulerPhase ==
         SchedulerPhase.persistentCallbacks) {
-      SchedulerBinding.instance.addPostFrameCallback((_) => notifyListeners());
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed) notifyListeners();
+      });
     } else {
       notifyListeners();
     }
@@ -85,6 +98,25 @@ class _DeviceCameraPreviewState extends State<DeviceCameraPreview>
   int _generation = 0;
   bool _visible = true;
   Future<void>? _initialization;
+  Future<void> _operations = Future<void>.value();
+  bool _active = true;
+
+  Future<void> _enqueue(Future<void> Function() action) {
+    final next = _operations.then((_) => action());
+    _operations = next.catchError((Object error) {
+      debugPrint('Camera preview cleanup failed: $error');
+    });
+    return _operations;
+  }
+
+  Future<void> _disposeController(CameraController? controller) async {
+    try {
+      await controller?.dispose();
+    } catch (error) {
+      // Failed initialization can leave CameraX without a preview surface.
+      debugPrint('Camera preview release failed: $error');
+    }
+  }
 
   bool get _cameraOn =>
       widget.simulated ? _simulatedCamera : _controller != null;
@@ -157,37 +189,51 @@ class _DeviceCameraPreviewState extends State<DeviceCameraPreview>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (widget.simulated) return;
-    if (state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.inactive && _busy) {
+      // The initial permission dialog also makes the app inactive. Let that
+      // initialization finish; a real background transition reaches paused.
+      return;
+    }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _active = false;
       _stop();
-    } else if (state == AppLifecycleState.resumed && _requested && _visible) {
-      _start();
+    } else if (state == AppLifecycleState.resumed) {
+      _active = true;
+      if (_requested && _visible && !_busy) _start();
     }
   }
 
-  Future<void> _stop() async {
+  Future<void> _stop() {
     _generation++;
-    final controller = _controller;
-    _controller = null;
-    if (mounted) _setState(() => _busy = false);
-    await controller?.dispose();
+    return _enqueue(() async {
+      final controller = _controller;
+      _controller = null;
+      if (mounted) _setState(() => _busy = false);
+      await _disposeController(controller);
+      if (mounted && _requested && _visible && _active) {
+        unawaited(_start());
+      }
+    });
   }
 
   Future<void> _start() {
     if (_busy) return _initialization ?? Future<void>.value();
-    return _initialization = _initialize();
-  }
-
-  Future<void> _initialize() async {
-    if (_busy || !_visible) return;
     _requested = true;
     final generation = ++_generation;
+    return _initialization = _enqueue(() => _initialize(generation));
+  }
+
+  Future<void> _initialize(int generation) async {
+    if (!mounted || !_visible || !_active || generation != _generation) return;
     _setState(() {
       _busy = true;
       _error = null;
     });
     final oldController = _controller;
     _controller = null;
-    await oldController?.dispose();
+    await _disposeController(oldController);
     CameraController? next;
     try {
       _cameras = await availableCameras();
@@ -203,12 +249,10 @@ class _DeviceCameraPreviewState extends State<DeviceCameraPreview>
       );
       await next.initialize();
       if (!mounted || generation != _generation) {
-        await next.dispose();
         return;
       }
       _setState(() => _controller = next);
     } catch (_) {
-      await next?.dispose();
       if (mounted && generation == _generation) {
         _setState(
           () => _error =
@@ -216,6 +260,7 @@ class _DeviceCameraPreviewState extends State<DeviceCameraPreview>
         );
       }
     } finally {
+      if (!identical(_controller, next)) await _disposeController(next);
       if (mounted && generation == _generation) _setState(() => _busy = false);
     }
   }
@@ -227,7 +272,13 @@ class _DeviceCameraPreviewState extends State<DeviceCameraPreview>
     widget.handle?._setMicrophone = null;
     WidgetsBinding.instance.removeObserver(this);
     _generation++;
-    _controller?.dispose();
+    unawaited(
+      _enqueue(() async {
+        final controller = _controller;
+        _controller = null;
+        await _disposeController(controller);
+      }),
+    );
     super.dispose();
   }
 

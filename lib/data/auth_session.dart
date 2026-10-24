@@ -7,6 +7,11 @@ abstract final class AuthSession {
     _expiresAt = DateTime.now().add(Duration(seconds: expiresIn));
   }
 
+  static bool get isAuthenticated =>
+      _token != null &&
+      _expiresAt != null &&
+      DateTime.now().isBefore(_expiresAt!);
+
   static void clear() {
     _token = null;
     _expiresAt = null;

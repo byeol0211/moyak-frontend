@@ -38,20 +38,17 @@ void main() {
       tester,
       ConsultationScreen(onScanQr: () {}, onOpenChatbot: () {}),
     );
-    expect(find.text('약사 연결을 기다리는 중이에요'), findsOneWidget);
-    expect(find.text('0:00'), findsOneWidget);
-
-    await tester.pump(const Duration(seconds: 3));
-    expect(find.text('화상 상담 입장'), findsWidgets);
-    expect(find.byTooltip('카메라 켜기'), findsOneWidget);
-    expect(find.text('입장 전 화면과 소리를 확인해 주세요'), findsOneWidget);
-
-    // 뒤로가면 대기 화면에서 입장 버튼이 보이고, 약사가 들어오면 문구가 바뀐다
-    await tester.tap(find.byTooltip('이전 화면'));
+    expect(find.text('상담 요청하기'), findsOneWidget);
+    await tester.tap(find.text('상담 요청하기'));
     await tester.pump();
-    expect(find.text('화상 상담 입장하기'), findsOneWidget);
+    expect(find.text('약사 연결을 기다리는 중이에요'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('입장 전 화면과 소리를 확인해 주세요'), findsNothing);
     await tester.pump(const Duration(seconds: 8));
-    expect(find.text('약사가 들어왔어요 — 지금 입장하기'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('약사가 들어왔어요 — 지금 입장하기'), 100);
+    await tester.tap(find.text('약사가 들어왔어요 — 지금 입장하기'));
+    await tester.pump();
+    expect(find.text('입장 전 화면과 소리를 확인해 주세요'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -65,12 +62,15 @@ void main() {
         onOpenChatbot: () => openedChatbot = true,
       ),
     );
+    await tester.tap(find.text('상담 요청하기'));
+    await tester.pump();
     await tester.scrollUntilVisible(find.text('상담 요청 취소'), 200);
     await tester.tap(find.text('상담 요청 취소'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('요청 취소'));
     await tester.pumpAndSettle();
-    expect(openedChatbot, isTrue);
+    expect(openedChatbot, isFalse);
+    expect(find.text('상담 요청하기'), findsOneWidget);
   });
 
   testWidgets('consult history lists records and opens details', (
@@ -275,13 +275,14 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('꺼짐 · UI 예시'), findsNWidgets(2));
-    expect(find.text('켜짐 · UI 예시'), findsOneWidget);
+    expect(find.text('켜짐 · UI 예시'), findsNothing);
+    expect(find.text('스피커 테스트'), findsOneWidget);
 
     // 카메라 카드 스위치를 켜면 미리보기 상자의 버튼도 "끄기"로 바뀐다.
     await tester.tap(find.byType(Switch).first);
     await tester.pump();
     expect(find.byTooltip('카메라 끄기'), findsOneWidget);
-    expect(find.text('켜짐 · UI 예시'), findsNWidgets(2));
+    expect(find.text('켜짐 · UI 예시'), findsOneWidget);
 
     // 상자 안 마이크 버튼을 누르면 마이크 카드 스위치가 켜진다.
     await tester.tap(find.byTooltip('마이크 켜기'));

@@ -19,12 +19,17 @@ CallEngine createDailyCall({
     : UnsupportedCallEngine();
 
 class DailyCallEngine extends CallEngine {
-  DailyCallEngine({bool cameraEnabled = false, bool microphoneEnabled = false})
-    : _camera = cameraEnabled,
-      _desiredCamera = cameraEnabled,
-      _microphone = microphoneEnabled,
-      _desiredMicrophone = microphoneEnabled;
+  DailyCallEngine({
+    bool cameraEnabled = false,
+    bool microphoneEnabled = false,
+    Future<daily.CallClient> Function()? createClient,
+  }) : _createClient = createClient ?? daily.CallClient.create,
+       _camera = cameraEnabled,
+       _desiredCamera = cameraEnabled,
+       _microphone = microphoneEnabled,
+       _desiredMicrophone = microphoneEnabled;
   daily.CallClient? _client;
+  final Future<daily.CallClient> Function() _createClient;
   StreamSubscription<daily.Event>? _events;
   final _remoteView = daily.VideoViewController();
   final _localView = daily.VideoViewController();
@@ -37,6 +42,8 @@ class DailyCallEngine extends CallEngine {
   bool _desiredCamera;
   bool _desiredMicrophone;
   Future<void> _deviceQueue = Future<void>.value();
+  Future<void> _renderQueue = Future<void>.value();
+  Future<void>? _connectTask;
   bool _busy = false;
   bool _connecting = false;
   bool _suspended = false;
@@ -73,7 +80,13 @@ class DailyCallEngine extends CallEngine {
       daily.VideoView(controller: _localView, fit: daily.VideoViewFit.cover);
 
   @override
-  Future<void> connect(CallRoom room) async {
+  Future<void> connect(CallRoom room) {
+    if (_closed) return Future<void>.value();
+    if (_connecting) return _connectTask ?? Future<void>.value();
+    return _connectTask = _connect(room);
+  }
+
+  Future<void> _connect(CallRoom room) async {
     if (_connecting || _closed) return;
     _connecting = true;
     final generation = ++_generation;
@@ -83,7 +96,7 @@ class DailyCallEngine extends CallEngine {
     try {
       await _release();
       if (_closed || generation != _generation) return;
-      final client = await daily.CallClient.create();
+      final client = await _createClient();
       if (_closed || generation != _generation) {
         await client.dispose();
         return;
@@ -106,7 +119,11 @@ class DailyCallEngine extends CallEngine {
           } else if (event is daily.ErrorEvent) {
             _error = '통화 연결 또는 장치 사용에 문제가 발생했어요. 권한과 네트워크를 확인해주세요.';
           }
-          unawaited(_syncParticipants(client, generation));
+          if (event is daily.ParticipantJoinedEvent ||
+              event is daily.ParticipantUpdatedEvent ||
+              event is daily.ParticipantLeftEvent) {
+            unawaited(_syncParticipants(client, generation));
+          }
           _changed();
         },
         onError: (Object _) {
@@ -118,6 +135,7 @@ class DailyCallEngine extends CallEngine {
         },
       );
       await client.setUsername(room.displayName);
+      if (_closed || generation != _generation) return;
       await client
           .join(
             url: room.url,
@@ -157,19 +175,28 @@ class DailyCallEngine extends CallEngine {
     }
   }
 
-  Future<void> _syncParticipants(
+  Future<void> _syncParticipants(daily.CallClient client, int generation) {
+    final next = _renderQueue.then(
+      (_) => _updateParticipants(client, generation),
+    );
+    _renderQueue = next.catchError((Object _) {});
+    return _renderQueue;
+  }
+
+  Future<void> _updateParticipants(
     daily.CallClient client,
     int generation,
   ) async {
     if (_closed || generation != _generation || !identical(_client, client)) {
       return;
     }
-    _local = client.participants.local;
+    final participants = client.participants;
+    _local = participants.local;
     if (_local?.media?.camera.state == daily.MediaState.blocked ||
         _local?.media?.microphone.state == daily.MediaState.blocked) {
       _error = '카메라 또는 마이크 권한이 차단되어 있어요. 기기 설정에서 허용해주세요.';
     }
-    final remotes = client.participants.remote.values;
+    final remotes = participants.remote.values;
     _remote =
         remotes.where((p) => p.media?.camera.track != null).firstOrNull ??
         remotes.firstOrNull;
@@ -274,6 +301,8 @@ class DailyCallEngine extends CallEngine {
     final events = _events;
     _events = null;
     await events?.cancel();
+    await _deviceQueue;
+    await _renderQueue;
     _local = null;
     _remote = null;
     try {
@@ -281,9 +310,8 @@ class DailyCallEngine extends CallEngine {
       await _localView.setTrack(null);
     } catch (_) {}
     if (client != null) {
-      try {
-        await client.leave().timeout(const Duration(seconds: 3));
-      } catch (_) {}
+      // Daily 0.41 dispose leaves the call itself. Explicit leave followed by
+      // dispose races the SDK's asynchronous participant refresh after "left".
       try {
         await client.dispose();
       } catch (_) {}
@@ -295,15 +323,19 @@ class DailyCallEngine extends CallEngine {
   Future<void> _close() async {
     _closed = true;
     _generation++;
+    await _connectTask;
     await _release();
   }
 
   @override
   void dispose() {
     _disposed = true;
-    unawaited(close());
-    _remoteView.dispose();
-    _localView.dispose();
+    unawaited(
+      close().whenComplete(() {
+        _remoteView.dispose();
+        _localView.dispose();
+      }),
+    );
     super.dispose();
   }
 }

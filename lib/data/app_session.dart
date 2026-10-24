@@ -11,6 +11,15 @@ import '../calls/consultation_chat.dart';
 class AppSession extends ChangeNotifier {
   static final instance = AppSession();
   String? userId;
+  String? userName;
+  String? username;
+  String get displayName => userName?.trim().isNotEmpty == true
+      ? userName!.trim()
+      : username?.trim().isNotEmpty == true
+      ? username!.trim()
+      : userId == null
+      ? '로그인 정보 없음'
+      : '사용자';
   String chatSummary = '';
   String consultationChatSummary = '';
   ConsultRecord? consultation;
@@ -135,6 +144,8 @@ class AppSession extends ChangeNotifier {
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove('moyak_user_id');
     userId = null;
+    userName = null;
+    username = null;
     clearCallRoom();
     chatSummary = '';
     consultationChatSummary = '';

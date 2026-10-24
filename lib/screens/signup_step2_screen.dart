@@ -309,7 +309,7 @@ class _SignupProgress extends StatelessWidget {
               ),
             ),
             Text(
-              '2 / 3',
+              '3 / 3',
               style: TextStyle(
                 color: _labelBrown,
                 fontSize: 14,
@@ -324,7 +324,7 @@ class _SignupProgress extends StatelessWidget {
           child: const SizedBox(
             height: 6,
             child: LinearProgressIndicator(
-              value: 2 / 3,
+              value: 1,
               backgroundColor: _fieldBorder,
               color: _brandYellow,
             ),

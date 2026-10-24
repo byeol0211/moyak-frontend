@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../data/app_session.dart';
+import 'care_profile_page.dart';
 import '../widgets/app_status_bar.dart';
 import '../widgets/feature_notice.dart';
 
@@ -42,6 +43,7 @@ class Mypage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _ProfileHeader(
+                      displayName: AppSession.instance.displayName,
                       userLabel: userId == null
                           ? '로그인 정보 없음'
                           : 'ID ${userId.length > 8 ? '${userId.substring(0, 8)}...' : userId}',
@@ -96,6 +98,14 @@ class Mypage extends StatelessWidget {
                               label: '내 상담 내역 (처방·상담 요약)',
                               onTap: onOpenConsultHistory,
                             ),
+                            _MypageMenuItem(
+                              label: '상담 참고사항 (알러지·질환·복용약)',
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const CareProfilePage(),
+                                ),
+                              ),
+                            ),
                             const _MypageMenuItem(label: '공지사항 및 서비스 안내'),
                             const _MypageMenuItem(label: '고객 지원'),
                             const _MypageMenuItem(label: '앱 설정'),
@@ -123,7 +133,13 @@ class Mypage extends StatelessWidget {
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.userLabel, required this.onTapPayment});
+  const _ProfileHeader({
+    required this.userLabel,
+    required this.displayName,
+    required this.onTapPayment,
+  });
+
+  final String displayName;
 
   final String userLabel;
   final VoidCallback onTapPayment;
@@ -150,9 +166,9 @@ class _ProfileHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '게스트 사용자',
-                    style: TextStyle(
+                  Text(
+                    displayName,
+                    style: const TextStyle(
                       color: _darkBrown,
                       fontSize: 20,
                       fontWeight: FontWeight.w800,

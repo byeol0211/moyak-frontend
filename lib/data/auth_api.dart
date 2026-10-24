@@ -21,16 +21,31 @@ class AuthApi {
 
   Future<void> login(String username, String password) =>
       _authenticate('login', username, password);
-  Future<void> signup(String username, String password) =>
-      _authenticate('signup', username, password);
+  Future<void> signup(
+    String username,
+    String password, {
+    required String name,
+  }) async {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) {
+      throw ApiException('이름을 입력해주세요.');
+    }
+    await _authenticate('signup', username, password, name: normalizedName);
+  }
+
   Future<void> _authenticate(
     String action,
     String username,
-    String password,
-  ) async {
+    String password, {
+    String? name,
+  }) async {
     final data = await _api.post(
       '/auth/$action',
-      body: {'username': username.trim(), 'password': password},
+      body: {
+        'username': username.trim(),
+        'password': password,
+        if (name != null) 'name': name.trim(),
+      },
       timeout: const Duration(seconds: 70),
     );
     if (data is! Map ||
@@ -47,6 +62,12 @@ class AuthApi {
     await AppSession.instance.logout();
     AuthSession.set(data['access_token'], data['expires_in']);
     AppSession.instance.userId = data['user']['id'];
+    AppSession.instance.userName = data['user']['name'] is String
+        ? data['user']['name'] as String
+        : null;
+    AppSession.instance.username = data['user']['username'] is String
+        ? data['user']['username'] as String
+        : username.trim();
   }
 
   void close() => _api.close();
