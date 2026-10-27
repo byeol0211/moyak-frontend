@@ -18,6 +18,7 @@ import 'screens/permission_screen.dart';
 import 'screens/permit_list_screen.dart';
 import 'screens/qr_camera_page.dart';
 import 'screens/screen_flows.dart';
+import 'screens/store_page.dart';
 import 'theme/app_theme.dart';
 import 'screens/mypage.dart';
 import 'widgets/app_bottom_navigation.dart';
@@ -26,6 +27,7 @@ import 'widgets/app_status_bar.dart';
 import 'config/app_config.dart';
 import 'data/app_session.dart';
 import 'widgets/feature_notice.dart';
+import 'widgets/machine_switch_sheet.dart';
 
 void main() {
   if (kakaoJavaScriptKey.isNotEmpty) {
@@ -394,6 +396,32 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+  /// 메인 화면 '선택됨' 배지: 주변 자판기 중 다른 자판기로 바꾼다.
+  Future<void> _changeMachine(VendingMachine current) async {
+    final next = await showMachineSwitchSheet(
+      context,
+      currentMachineId: current.id,
+      loadMachines: () async {
+        final position = await _scanPosition();
+        return loadNearbyMachines(
+          latitude: position?.latitude ?? _defaultScanLatitude,
+          longitude: position?.longitude ?? _defaultScanLongitude,
+        );
+      },
+    );
+    if (next == null || !mounted) return;
+    _connectMachine(next);
+    showFeatureNotice(context, '이용할 자판기를 바꿨어요: ${next.name}');
+  }
+
+  /// 메인 화면 마스코트: 연결한 자판기의 구매(재고) 화면.
+  void _openMachineStore(VendingMachine machine) => _pushSubPage(
+    (_) => MachineStorePage(
+      machineName: machine.name,
+      loadStock: () => loadMachineStock(machine.id),
+    ),
+  );
+
   void _pushSubPage(WidgetBuilder builder) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: builder));
 
@@ -447,6 +475,8 @@ class _AppShellState extends State<AppShell> {
               machineName: machine.name,
               paired: _machinePaired,
               onScanQr: _openQrScanner,
+              onOpenStore: () => _openMachineStore(machine),
+              onChangeMachine: () => _changeMachine(machine),
             )
           : MainHomeDisconnectedScreen(
               onScanQr: _openQrScanner,

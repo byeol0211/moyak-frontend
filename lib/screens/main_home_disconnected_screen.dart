@@ -89,6 +89,8 @@ class MainHomeConnectedScreen extends StatelessWidget {
     required this.machineName,
     required this.onScanQr,
     this.paired = false,
+    this.onOpenStore,
+    this.onChangeMachine,
     super.key,
   });
 
@@ -96,6 +98,12 @@ class MainHomeConnectedScreen extends StatelessWidget {
   final String machineName;
   final bool paired;
   final VoidCallback onScanQr;
+
+  /// 마스코트를 누르면 이 자판기의 구매(재고) 화면을 연다.
+  final VoidCallback? onOpenStore;
+
+  /// '선택됨' 배지를 누르면 다른 자판기로 바꾸는 창을 연다.
+  final VoidCallback? onChangeMachine;
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
@@ -127,6 +135,8 @@ class MainHomeConnectedScreen extends StatelessWidget {
                       child: _ConnectedCard(
                         machineName: machineName,
                         paired: paired,
+                        onOpenStore: onOpenStore,
+                        onChangeMachine: onChangeMachine,
                       ),
                     ),
                   ],
@@ -367,74 +377,26 @@ class _DisconnectedCard extends StatelessWidget {
   final bool isScanning;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(24),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x12000000),
-          blurRadius: 16,
-          offset: Offset(0, 7),
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => _HomeCard(
     child: Column(
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF6F5F3),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.circle, color: Color(0xFFBCAAA4), size: 8),
-              SizedBox(width: 6),
-              Text(
-                '자판기 연결 없음',
-                style: TextStyle(
-                  color: _secondaryBrown,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+        const Expanded(
+          child: _HomeCardContent(
+            badge: '자판기 연결 없음',
+            badgeColor: _secondaryBrown,
+            badgeDot: Color(0xFFBCAAA4),
+            badgeBackground: Color(0xFFF6F5F3),
+            image: 'assets/figma/moyak_2.png',
+            imageLabel: '자판기를 찾는 모약 마스코트',
+            title: '가까운 자판기가 있나요?',
+            description: '스마트 기기와 자판기를 연동하고 안전하게 의약품을 처방 및 결제하세요.',
           ),
         ),
-        Expanded(
-          child: Center(
-            child: Image.asset(
-              'assets/figma/moyak_2.png',
-              width: 200,
-              height: 188,
-              fit: BoxFit.contain,
-              semanticLabel: '자판기를 찾는 모약 마스코트',
-            ),
-          ),
-        ),
-        const Text(
-          '가까운 자판기가 있나요?',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: _darkBrown,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          '스마트 기기와 자판기를 연동하고 안전하게 의약품을 처방 및 결제하세요.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: _secondaryBrown, fontSize: 12, height: 1.35),
-        ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         const Divider(height: 1, color: Color(0xFFF0ECE7)),
-        const SizedBox(height: 22),
+        const SizedBox(height: 18),
         SizedBox(
-          height: 48,
+          height: 50,
           width: double.infinity,
           child: OutlinedButton.icon(
             onPressed: isScanning ? null : onRescanDevice,
@@ -456,7 +418,7 @@ class _DisconnectedCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(24),
               ),
               textStyle: const TextStyle(
-                fontSize: 14,
+                fontSize: 15,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -468,10 +430,43 @@ class _DisconnectedCard extends StatelessWidget {
 }
 
 class _ConnectedCard extends StatelessWidget {
-  const _ConnectedCard({required this.machineName, required this.paired});
+  const _ConnectedCard({
+    required this.machineName,
+    required this.paired,
+    this.onOpenStore,
+    this.onChangeMachine,
+  });
 
   final String machineName;
   final bool paired;
+  final VoidCallback? onOpenStore;
+  final VoidCallback? onChangeMachine;
+
+  @override
+  Widget build(BuildContext context) => _HomeCard(
+    child: _HomeCardContent(
+      onImageTap: onOpenStore,
+      imageTapLabel: '$machineName 구매 화면 열기',
+      onBadgeTap: onChangeMachine,
+      badgeTapHint: '다른 자판기로 변경',
+      badge: '$machineName ${paired ? '연동됨' : '선택됨'}',
+      badgeColor: const Color(0xFF13B965),
+      badgeDot: const Color(0xFF20C878),
+      badgeBackground: const Color(0xFFE8FBF0),
+      badgeBorder: const Color(0xFF8AE0AE),
+      image: 'assets/figma/moyak_1.png',
+      imageLabel: '모약 자판기 마스코트',
+      title: paired ? '자판기 연결 화면입니다' : '이용할 자판기를 선택했어요',
+      description:
+          '재고는 지도에서 자판기를 눌러 확인할 수 있어요. 실제 연결은 QR 스캔으로, 구매와 결제는 자판기에서 진행합니다.',
+    ),
+  );
+}
+
+class _HomeCard extends StatelessWidget {
+  const _HomeCard({required this.child});
+
+  final Widget child;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -487,58 +482,136 @@ class _ConnectedCard extends StatelessWidget {
         ),
       ],
     ),
-    child: Column(
+    child: child,
+  );
+}
+
+/// 연결 성공·실패 카드 공통: 배지·마스코트·안내 문구를 한 묶음으로
+/// 가운데에 모은다. 공간이 모자라면 마스코트만 줄어든다.
+class _HomeCardContent extends StatelessWidget {
+  const _HomeCardContent({
+    required this.badge,
+    required this.badgeColor,
+    required this.badgeDot,
+    required this.badgeBackground,
+    required this.image,
+    required this.imageLabel,
+    required this.title,
+    required this.description,
+    this.badgeBorder,
+    this.onImageTap,
+    this.imageTapLabel,
+    this.onBadgeTap,
+    this.badgeTapHint,
+  });
+
+  final String badge;
+  final Color badgeColor;
+  final Color badgeDot;
+  final Color badgeBackground;
+  final Color? badgeBorder;
+  final String image;
+  final String imageLabel;
+  final String title;
+  final String description;
+  final VoidCallback? onImageTap;
+  final String? imageTapLabel;
+  final VoidCallback? onBadgeTap;
+  final String? badgeTapHint;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget mascot = Image.asset(
+      image,
+      width: 300,
+      height: 300,
+      fit: BoxFit.contain,
+      semanticLabel: imageLabel,
+    );
+    if (onImageTap != null) {
+      mascot = Tooltip(
+        message: imageTapLabel ?? imageLabel,
+        child: Semantics(
+          button: true,
+          label: imageTapLabel,
+          child: InkResponse(onTap: onImageTap, radius: 150, child: mascot),
+        ),
+      );
+    }
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: const Color(0xFFE8FBF0),
-            border: Border.all(color: const Color(0xFF8AE0AE)),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.circle, color: Color(0xFF20C878), size: 8),
-              const SizedBox(width: 6),
-              Text(
-                '$machineName ${paired ? '연동됨' : '선택됨'}',
-                style: const TextStyle(
-                  color: Color(0xFF13B965),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+        // 누를 수 있으면 오른쪽에 변경 표시를 붙인다.
+        Semantics(
+          button: onBadgeTap != null,
+          hint: badgeTapHint,
+          child: Material(
+            color: badgeBackground,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(22),
+              side: badgeBorder == null
+                  ? BorderSide.none
+                  : BorderSide(color: badgeBorder!),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onBadgeTap,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  9,
+                  onBadgeTap == null ? 16 : 10,
+                  9,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.circle, color: badgeDot, size: 10),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        badge,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: badgeColor,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    if (onBadgeTap != null) ...[
+                      const SizedBox(width: 4),
+                      Icon(Icons.expand_more, color: badgeColor, size: 22),
+                    ],
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Center(
-            child: Image.asset(
-              'assets/figma/moyak_1.png',
-              width: 200,
-              height: 200,
-              fit: BoxFit.contain,
-              semanticLabel: '모약 자판기 마스코트',
             ),
           ),
         ),
+        const SizedBox(height: 8),
+        Flexible(child: mascot),
+        const SizedBox(height: 8),
         Text(
-          paired ? '자판기 연결 화면입니다' : '이용할 자판기를 선택했어요',
+          title,
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             color: _darkBrown,
-            fontSize: 18,
+            fontSize: 20,
             fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
-          '재고는 지도에서 자판기를 눌러 확인할 수 있어요. 실제 연결은 QR 스캔으로, 구매와 결제는 자판기에서 진행합니다.',
+        Text(
+          description,
           textAlign: TextAlign.center,
-          style: TextStyle(color: _secondaryBrown, fontSize: 12, height: 1.35),
+          style: const TextStyle(
+            color: _secondaryBrown,
+            fontSize: 13.5,
+            height: 1.4,
+          ),
         ),
       ],
-    ),
-  );
+    );
+  }
 }

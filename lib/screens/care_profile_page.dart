@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/app_config.dart';
 import '../data/api_client.dart';
 import '../data/auth_session.dart';
+import '../widgets/consult_header.dart';
 
 /// Existing structured condition/medication tables; purchase history is read-only.
 class CareProfilePage extends StatefulWidget {
@@ -230,8 +231,45 @@ class _CareProfilePageState extends State<CareProfilePage> {
     );
   }
 
+  // 챗봇 화면과 같은 초록색으로 이 화면의 버튼들을 맞춘다.
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => Theme(
+    data: Theme.of(context).copyWith(
+      colorScheme: Theme.of(context).colorScheme
+          .copyWith(primary: consultGreen, onPrimary: Colors.white),
+    ),
+    child: _buildPage(context),
+  );
+
+  Widget _buildPage(BuildContext context) => Scaffold(
+    // 저장 버튼은 스크롤 목록 밖 하단에 고정해 기기 하단 바와 겹치지 않게 한다.
+    bottomNavigationBar: _revision == null
+        ? null
+        : SafeArea(
+            top: false,
+            child: Padding(
+              // 기기 하단 바 높이와 별개로 여유를 둬 버튼이 가려지지 않게 한다.
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 32),
+              child: SizedBox(
+                height: 52,
+                child: FilledButton(
+                  onPressed: _busy ? null : _save,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: consultGreen,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  child: const Text('참고사항 저장'),
+                ),
+              ),
+            ),
+          ),
     appBar: AppBar(
       title: const Text('상담 참고사항'),
       actions: [
@@ -328,11 +366,6 @@ class _CareProfilePageState extends State<CareProfilePage> {
                     const Text(
                       '직접 입력한 내용은 약사의 확인용 정보입니다. 약품·성분 코드로 자동 판정되는 정보는 아닙니다.',
                       style: TextStyle(fontSize: 12),
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: _busy ? null : _save,
-                      child: const Text('참고사항 저장'),
                     ),
                   ],
                 ),

@@ -26,6 +26,30 @@ const demoConnectedMachine = VendingMachine(
   itemCount: 6,
 );
 
+/// 자판기 변경 창에서 고를 수 있는 예시 자판기들(가까운 순).
+const demoNearbyMachines = [
+  demoConnectedMachine,
+  VendingMachine(
+    id: 'demo-library-1',
+    name: '중앙도서관 1층 자판기',
+    latitude: 37.4521,
+    longitude: 126.6548,
+    address: '중앙도서관 1층 출입구 옆',
+    operatingHours: '07:00 ~ 23:00',
+    stockCount: 42,
+    itemCount: 5,
+  ),
+  VendingMachine(
+    id: 'demo-student-hall',
+    name: '학생회관 B1 자판기',
+    latitude: 37.4498,
+    longitude: 126.6561,
+    address: '학생회관 지하 1층',
+    operatingHours: '09:00 ~ 21:00',
+    itemCount: 4,
+  ),
+];
+
 const _demoStock = [
   StockItem(name: '타이레놀정 500mg', stock: 12, price: 3000, category: '일반 상비'),
   StockItem(name: '판콜에이 내복액', stock: 5, price: 2600, category: '의약품'),

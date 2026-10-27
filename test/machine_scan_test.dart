@@ -27,6 +27,33 @@ final _machines = {
 void main() {
   _findNearestTests();
 
+  test('lists nearby machines in server order', () async {
+    Uri? asked;
+    final client = MockClient((request) async {
+      asked = request.url;
+      return _json({
+        'items': [
+          ..._machines['items']!,
+          {'id': 'no-location', 'name': '위치 없음'},
+          {
+            'id': 'second',
+            'name': '두 번째 자판기',
+            'latitude': 37.6,
+            'longitude': 126.9,
+          },
+        ],
+      });
+    });
+    final machines = await loadNearbyMachines(
+      latitude: 37.5,
+      longitude: 126.8,
+      client: client,
+    );
+    expect(asked?.path, '/api/v1/map/machines');
+    expect(asked?.queryParameters, {'lat': '37.5', 'lng': '126.8'});
+    expect(machines.map((m) => m.id), ['760e9d5b', 'second']);
+  });
+
   test('logs in to the machine and finds its name by code', () async {
     Map<String, dynamic>? sent;
     final client = MockClient((request) async {

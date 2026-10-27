@@ -156,3 +156,58 @@ class _StorePageState extends State<StorePage> {
     );
   }
 }
+
+/// 메인 화면에서 연 자판기 구매 화면: 재고를 불러온 뒤 [StorePage]를 보여준다.
+class MachineStorePage extends StatefulWidget {
+  const MachineStorePage({
+    required this.machineName,
+    required this.loadStock,
+    super.key,
+  });
+
+  final String machineName;
+  final Future<List<StockItem>> Function() loadStock;
+
+  @override
+  State<MachineStorePage> createState() => _MachineStorePageState();
+}
+
+class _MachineStorePageState extends State<MachineStorePage> {
+  late Future<List<StockItem>> _stock = widget.loadStock();
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<StockItem>>(
+    future: _stock,
+    builder: (context, snapshot) {
+      final items = snapshot.data;
+      if (items != null) {
+        return StorePage(machineName: widget.machineName, items: items);
+      }
+      final failed = snapshot.hasError;
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F3),
+        appBar: AppBar(title: const Text('자판기 재고')),
+        body: Center(
+          child: failed
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('재고를 불러오지 못했어요.'),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _stock = widget.loadStock();
+                        });
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('다시 시도'),
+                    ),
+                  ],
+                )
+              : const CircularProgressIndicator(),
+        ),
+      );
+    },
+  );
+}
