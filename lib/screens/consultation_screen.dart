@@ -126,6 +126,8 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
       SnackBar(
         content: const Text('약사가 상담방에 입장했어요. 입장 버튼을 눌러주세요.'),
         duration: const Duration(seconds: 5),
+        // 액션이 있는 SnackBar는 기본적으로 자동으로 닫히지 않으므로 명시한다.
+        persist: false,
         action: widget.onOpenConsultation == null
             ? null
             : SnackBarAction(

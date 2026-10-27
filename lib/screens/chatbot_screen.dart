@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../data/auth_session.dart';
+import '../widgets/pill_photo_sheet.dart';
 
 import '../widgets/consult_header.dart';
 import '../config/app_config.dart';
@@ -139,6 +140,37 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  Future<void> _attachPhotos() async {
+    if (_busy) return;
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: consultCream,
+      builder: (_) =>
+          PillPhotoSheet(client: _client, testMode: widget.client != null),
+    );
+    if (!mounted || result == null) return;
+    setState(() {
+      _messages.add({
+        'role': 'user',
+        'content': '알약 사진',
+        'photos': result['photos'],
+      });
+      _messages.add({
+        'role': 'assistant',
+        'content': result['message'],
+        'pillResult': result,
+      });
+    });
+    _scrollToBottom();
+  }
+
+  void _explainPill(String name) {
+    if (_busy) return;
+    _messageController.text = '${name}에 대해 설명해 주세요. 효능이랑 주의사항도 알려 주세요.';
+    _sendMessage();
+  }
+
   void _syncSummary() {
     AppSession.instance.chatSummary = _messages
         .where((message) => message['complete'] == true)
@@ -181,7 +213,14 @@ class _ChatPageState extends State<ChatPage> {
                 const _TrustLine(),
                 for (final message in _messages) ...[
                   const SizedBox(height: 10),
-                  if (message['role'] == 'user')
+                  if (message['photos'] != null)
+                    PillPhotoThumbnails(photos: message['photos'])
+                  else if (message['pillResult'] != null)
+                    PillResultCard(
+                      data: message['pillResult'],
+                      onExplain: _busy ? null : _explainPill,
+                    )
+                  else if (message['role'] == 'user')
                     _QuestionBubble(text: message['content'] as String)
                   else ...[
                     _AnswerCard(
@@ -217,6 +256,7 @@ class _ChatPageState extends State<ChatPage> {
             controller: _messageController,
             busy: _busy,
             onSend: _sendMessage,
+            onAttach: _attachPhotos,
           ),
         ],
       ),
@@ -642,11 +682,13 @@ class _Composer extends StatelessWidget {
     required this.controller,
     required this.busy,
     required this.onSend,
+    required this.onAttach,
   });
 
   final TextEditingController controller;
   final bool busy;
   final VoidCallback onSend;
+  final VoidCallback onAttach;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -657,6 +699,12 @@ class _Composer extends StatelessWidget {
     ),
     child: Row(
       children: [
+        IconButton(
+          key: const Key('chat-attach'),
+          tooltip: '알약 사진 첨부',
+          onPressed: busy ? null : onAttach,
+          icon: const Icon(Icons.add),
+        ),
         Expanded(
           child: SizedBox(
             height: 48,
