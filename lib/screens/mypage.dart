@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../config/app_config.dart';
-import '../data/api_client.dart';
 import '../data/app_session.dart';
-import '../data/auth_api.dart';
-import '../data/auth_session.dart';
 import 'care_profile_page.dart';
 import '../widgets/app_status_bar.dart';
 import '../widgets/feature_notice.dart';
@@ -18,13 +14,12 @@ const _border = Color(0xFFEFEBE9);
 const _cream = Color(0xFFFFFDE7);
 const _logoutRed = Color(0xFFFF3B30);
 
-class Mypage extends StatefulWidget {
+class Mypage extends StatelessWidget {
   const Mypage({
     required this.onOpenConsultHistory,
     required this.onOpenPermit,
     required this.onOpenInventory,
     this.onLogout,
-    this.auth,
     super.key,
   });
 
@@ -32,48 +27,6 @@ class Mypage extends StatefulWidget {
   final VoidCallback onOpenPermit;
   final VoidCallback onOpenInventory;
   final VoidCallback? onLogout;
-
-  /// 테스트에서 가짜 서버를 넣을 때 쓴다.
-  final AuthApi? auth;
-
-  @override
-  State<Mypage> createState() => _MypageState();
-}
-
-class _MypageState extends State<Mypage> {
-  late final AuthApi _auth = widget.auth ?? AuthApi();
-
-  /// 미리보기·게스트(토큰 없음)는 서버 계정이 없으므로 이름 조회·수정을 하지 않는다.
-  bool get _hasAccount =>
-      !AppConfig.preview.value && AuthSession.isAuthenticated;
-
-  @override
-  void initState() {
-    super.initState();
-    if (_hasAccount) {
-      // 화면 표시는 로그인 응답 값으로 먼저 하고, 서버 값으로 조용히 맞춘다.
-      _auth.refreshProfile().catchError((Object _) {});
-    }
-  }
-
-  @override
-  void dispose() {
-    if (widget.auth == null) _auth.close();
-    super.dispose();
-  }
-
-  Future<void> _editName() async {
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (_) => _NameEditDialog(
-        initial: AppSession.instance.userName ?? '',
-        onSave: _auth.updateName,
-      ),
-    );
-    if (saved == true && mounted) {
-      showFeatureNotice(context, '이름을 저장했어요.');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,17 +42,13 @@ class _MypageState extends State<Mypage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ListenableBuilder(
-                      listenable: AppSession.instance,
-                      builder: (context, _) => _ProfileHeader(
-                        displayName: AppSession.instance.displayName,
-                        userLabel: userId == null
-                            ? '로그인 정보 없음'
-                            : 'ID ${userId.length > 8 ? '${userId.substring(0, 8)}...' : userId}',
-                        onEditName: _hasAccount ? _editName : null,
-                        onTapPayment: () =>
-                            showFeatureNotice(context, '결제는 자판기에서 진행합니다.'),
-                      ),
+                    _ProfileHeader(
+                      displayName: AppSession.instance.displayName,
+                      userLabel: userId == null
+                          ? '로그인 정보 없음'
+                          : 'ID ${userId.length > 8 ? '${userId.substring(0, 8)}...' : userId}',
+                      onTapPayment: () =>
+                          showFeatureNotice(context, '결제는 자판기에서 진행합니다.'),
                     ),
                     Padding(
                       padding: const EdgeInsets.all(20),
@@ -113,7 +62,7 @@ class _MypageState extends State<Mypage> {
                                 iconBackground: _cream,
                                 title: '전자 구매 허가서',
                                 description: '약사 발급 처방장 열람',
-                                onTap: widget.onOpenPermit,
+                                onTap: onOpenPermit,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -147,7 +96,7 @@ class _MypageState extends State<Mypage> {
                           children: [
                             _MypageMenuItem(
                               label: '내 상담 내역 (처방·상담 요약)',
-                              onTap: widget.onOpenConsultHistory,
+                              onTap: onOpenConsultHistory,
                             ),
                             _MypageMenuItem(
                               label: '상담 참고사항 (알러지·질환·복용약)',
@@ -165,7 +114,7 @@ class _MypageState extends State<Mypage> {
                               label: '로그아웃',
                               destructive: true,
                               showDivider: false,
-                              onTap: widget.onLogout,
+                              onTap: onLogout,
                             ),
                           ],
                         ),
@@ -188,13 +137,9 @@ class _ProfileHeader extends StatelessWidget {
     required this.userLabel,
     required this.displayName,
     required this.onTapPayment,
-    this.onEditName,
   });
 
   final String displayName;
-
-  /// 로그인 계정이 있을 때만 이름 옆 수정 버튼을 보여준다.
-  final VoidCallback? onEditName;
 
   final String userLabel;
   final VoidCallback onTapPayment;
@@ -221,32 +166,13 @@ class _ProfileHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          displayName,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: _darkBrown,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      if (onEditName != null)
-                        IconButton(
-                          key: const Key('mypage-edit-name'),
-                          tooltip: '이름 수정',
-                          onPressed: onEditName,
-                          visualDensity: VisualDensity.compact,
-                          icon: const Icon(
-                            Icons.edit_outlined,
-                            color: _mutedBrown,
-                            size: 18,
-                          ),
-                        ),
-                    ],
+                  Text(
+                    displayName,
+                    style: const TextStyle(
+                      color: _darkBrown,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -307,73 +233,6 @@ class _ProfileHeader extends StatelessWidget {
         ),
       ],
     ),
-  );
-}
-
-class _NameEditDialog extends StatefulWidget {
-  const _NameEditDialog({required this.initial, required this.onSave});
-
-  final String initial;
-  final Future<void> Function(String name) onSave;
-
-  @override
-  State<_NameEditDialog> createState() => _NameEditDialogState();
-}
-
-class _NameEditDialogState extends State<_NameEditDialog> {
-  late final _controller = TextEditingController(text: widget.initial);
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (_saving) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      await widget.onSave(_controller.text);
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-          _error = e is ApiException ? e.message : '저장하지 못했어요. 다시 시도해주세요.';
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('이름 수정'),
-    content: TextField(
-      key: const Key('mypage-name-field'),
-      controller: _controller,
-      autofocus: true,
-      maxLength: 40,
-      enabled: !_saving,
-      textInputAction: TextInputAction.done,
-      onSubmitted: (_) => _save(),
-      decoration: InputDecoration(hintText: '실명을 입력해주세요', errorText: _error),
-    ),
-    actions: [
-      TextButton(
-        onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-        child: const Text('취소'),
-      ),
-      FilledButton(
-        key: const Key('mypage-name-save'),
-        onPressed: _saving ? null : _save,
-        child: Text(_saving ? '저장 중...' : '저장'),
-      ),
-    ],
   );
 }
 

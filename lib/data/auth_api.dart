@@ -70,28 +70,5 @@ class AuthApi {
         : username.trim();
   }
 
-  /// `GET /auth/me` — 토큰이 아직 유효한지 확인하고 마이페이지 이름을 서버 값으로 맞춘다.
-  Future<void> refreshProfile() async {
-    _applyProfile(await _api.get('/auth/me'));
-  }
-
-  /// `PATCH /auth/me` — 마이페이지에서 실명을 입력·수정한다.
-  Future<void> updateName(String name) async {
-    final normalized = name.trim();
-    if (normalized.isEmpty) throw ApiException('이름을 입력해주세요.');
-    if (normalized.length > 40) throw ApiException('이름은 40자 이하로 입력해주세요.');
-    _applyProfile(await _api.patch('/auth/me', body: {'name': normalized}));
-  }
-
-  void _applyProfile(dynamic data) {
-    if (data is! Map || data['id'] is! String) {
-      throw ApiException('내 정보 응답을 읽지 못했어요.');
-    }
-    AppSession.instance.updateProfile(
-      name: data['name'] is String ? data['name'] as String : null,
-      username: data['username'] is String ? data['username'] as String : null,
-    );
-  }
-
   void close() => _api.close();
 }

@@ -20,14 +20,6 @@ class AppSession extends ChangeNotifier {
       : userId == null
       ? '로그인 정보 없음'
       : '사용자';
-
-  /// `/auth/me` 응답으로 받은 이름을 반영한다. username이 없으면 기존 값을 유지한다.
-  void updateProfile({String? name, String? username}) {
-    userName = name;
-    if (username != null) this.username = username;
-    notifyListeners();
-  }
-
   String chatSummary = '';
   String consultationChatSummary = '';
   ConsultRecord? consultation;

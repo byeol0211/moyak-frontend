@@ -6,6 +6,7 @@ import '../calls/call_engine.dart';
 import '../calls/call_room.dart';
 import '../calls/daily_call_factory.dart';
 import '../calls/consultation_chat.dart';
+import '../calls/recording_consent.dart';
 
 enum _ExitChoice { cancel, leave }
 
@@ -16,6 +17,7 @@ class VideoConsultationPage extends StatefulWidget {
     this.room,
     this.engine,
     this.chat,
+    this.recording,
     this.initialCameraEnabled = false,
     this.initialMicrophoneEnabled = false,
     super.key,
@@ -28,6 +30,9 @@ class VideoConsultationPage extends StatefulWidget {
   /// An injected engine/chat remains owned by its caller.
   final CallEngine? engine;
   final ConsultationChat? chat;
+
+  /// 음성 기록·AI 요약 동의. 없으면 실제 상담 채팅([ApiConsultationChat])의 상담으로 만든다.
+  final RecordingConsent? recording;
   final bool initialCameraEnabled;
   final bool initialMicrophoneEnabled;
 
@@ -51,6 +56,20 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
             ));
   bool get _preview =>
       widget.room == null && widget.engine == null && widget.chat == null;
+  late final RecordingConsent? _recording =
+      widget.recording ??
+      switch (widget.chat) {
+        final ApiConsultationChat chat => ApiRecordingConsent(
+          consultationId: chat.consultationId,
+          userId: chat.userId,
+        ),
+        _ => null,
+      };
+  RecordingConsentState? _consentState;
+  bool _consentPolling = false;
+  bool _consenting = false;
+  bool _consentDismissed = false;
+  String? _consentError;
   Timer? _chatTimer;
   bool _polling = false;
   bool _sending = false;
@@ -70,11 +89,11 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (widget.room != null) unawaited(_call?.connect(widget.room!));
-      if (widget.chat != null) {
-        unawaited(_pollChat());
+      if (widget.chat != null || _recording != null) {
+        _pollAll();
         _chatTimer = Timer.periodic(
           const Duration(seconds: 3),
-          (_) => _pollChat(),
+          (_) => _pollAll(),
         );
       }
     });
@@ -91,15 +110,100 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
       _chatTimer?.cancel();
     } else if (state == AppLifecycleState.resumed) {
       unawaited(_call?.resumeMedia());
-      if (widget.chat != null && !_serverEnded) {
+      if ((widget.chat != null || _recording != null) && !_serverEnded) {
         _chatTimer?.cancel();
-        unawaited(_pollChat());
+        _pollAll();
         _chatTimer = Timer.periodic(
           const Duration(seconds: 3),
-          (_) => _pollChat(),
+          (_) => _pollAll(),
         );
       }
     }
+  }
+
+  void _pollAll() {
+    unawaited(_pollChat());
+    unawaited(_pollConsent());
+  }
+
+  /// 약사가 상담을 연결했는지, 양측이 동의했는지 확인한다. 양측 동의 후에는 더 볼 필요가 없다.
+  Future<void> _pollConsent() async {
+    final recording = _recording;
+    if (recording == null ||
+        _consentPolling ||
+        _serverEnded ||
+        _consentState?.bothConsented == true ||
+        _consentState?.ended == true) {
+      return;
+    }
+    _consentPolling = true;
+    try {
+      final state = await recording.status();
+      if (mounted) setState(() => _consentState = state);
+    } catch (_) {
+      // 동의 상태는 부가 기능이라 통화·채팅을 막지 않는다. 다음 확인 때 다시 본다.
+    } finally {
+      _consentPolling = false;
+    }
+  }
+
+  Future<void> _giveConsent() async {
+    final recording = _recording;
+    if (recording == null || _consenting) return;
+    setState(() {
+      _consenting = true;
+      _consentError = null;
+    });
+    try {
+      final state = await recording.consent();
+      if (mounted) setState(() => _consentState = state);
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => _consentError = e is StateError
+              ? e.message
+              : '동의를 보내지 못했어요. 다시 시도해주세요.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _consenting = false);
+    }
+  }
+
+  Widget? _consentPanel() {
+    final state = _consentState;
+    if (_recording == null || state == null || state.ended || _serverEnded) {
+      return null;
+    }
+    if (state.userConsented) {
+      return _ConsentStatusChip(
+        text: state.pharmacistConsented
+            ? 'AI 상담 요약 동의 완료 · 약사가 검토 후 공개해요'
+            : 'AI 상담 요약 동의 완료 · 약사 동의 대기',
+      );
+    }
+    if (_consentDismissed) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: const Key('recording-consent-reopen'),
+          onPressed: () => setState(() => _consentDismissed = false),
+          style: TextButton.styleFrom(
+            backgroundColor: const Color(0x99000000),
+            foregroundColor: Colors.white,
+          ),
+          icon: const Icon(Icons.description_outlined, size: 18),
+          label: const Text('AI 상담 요약 동의하기'),
+        ),
+      );
+    }
+    return _ConsentCard(
+      pharmacistConsented: state.pharmacistConsented,
+      busy: _consenting,
+      error: _consentError,
+      onConsent: _giveConsent,
+      onLater: () => setState(() => _consentDismissed = true),
+    );
   }
 
   Future<void> _pollChat() async {
@@ -255,6 +359,7 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _chatTimer?.cancel();
+    if (widget.recording == null) _recording?.dispose();
     _call?.removeListener(_callChanged);
     unawaited(_call?.close());
     if (widget.engine == null) _call?.dispose();
@@ -481,6 +586,8 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
                     ),
                   ),
                 ),
+              if (_consentPanel() case final panel?)
+                Positioned(top: 96, left: 12, right: 108, child: panel),
               Positioned(
                 left: 12,
                 right: 12,
@@ -636,6 +743,120 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
               ),
             ],
           ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// 약사가 상담을 연결하면 뜨는 동의 요청. 양측이 동의해야 약사 쪽 녹음과 AI 요약이 시작된다.
+class _ConsentCard extends StatelessWidget {
+  const _ConsentCard({
+    required this.pharmacistConsented,
+    required this.busy,
+    required this.error,
+    required this.onConsent,
+    required this.onLater,
+  });
+
+  final bool pharmacistConsented;
+  final bool busy;
+  final String? error;
+  final VoidCallback onConsent;
+  final VoidCallback onLater;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    key: const Key('recording-consent-card'),
+    color: const Color(0xF2FFFDF5),
+    borderRadius: BorderRadius.circular(14),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            pharmacistConsented ? '약사가 AI 상담 요약에 동의했어요' : 'AI 상담 요약 동의',
+            style: const TextStyle(
+              color: Color(0xFF342521),
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '약사님 기기에서 녹음한 상담 대화를 글자로 바꾸고, 상담 채팅·챗봇 대화와 함께 '
+            'AI가 상담 요약을 만드는 데 동의합니다. 요약은 약사가 검토한 뒤 공개되며, '
+            '원본 음성은 글자로 바꾼 뒤 삭제됩니다.\n'
+            '이 앱은 내 휴대폰 마이크를 따로 녹음하지 않아요.',
+            style: TextStyle(
+              color: Color(0xFF55483F),
+              fontSize: 12.5,
+              height: 1.5,
+            ),
+          ),
+          if (error != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              error!,
+              style: const TextStyle(color: Color(0xFFC94C43), fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                key: const Key('recording-consent-later'),
+                onPressed: busy ? null : onLater,
+                child: const Text('나중에'),
+              ),
+              const SizedBox(width: 4),
+              FilledButton(
+                key: const Key('recording-consent-agree'),
+                onPressed: busy ? null : onConsent,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF176B5B),
+                ),
+                child: Text(busy ? '보내는 중...' : '동의합니다'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ConsentStatusChip extends StatelessWidget {
+  const _ConsentStatusChip({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.centerLeft,
+    child: DecoratedBox(
+      key: const Key('recording-consent-status'),
+      decoration: BoxDecoration(
+        color: const Color(0x99000000),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.check_circle, color: Color(0xFF65D6A8), size: 16),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                text,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ),
+          ],
         ),
       ),
     ),

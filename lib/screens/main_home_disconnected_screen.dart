@@ -162,7 +162,7 @@ class _HomeHeader extends StatelessWidget {
         child: Text(
           'MOYAK',
           style: TextStyle(
-            color: _darkBrown,
+            color: _brandYellow,
             fontSize: 26,
             fontWeight: FontWeight.w800,
           ),
