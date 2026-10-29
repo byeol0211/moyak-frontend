@@ -79,6 +79,9 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
   String? _chatError;
   bool _chatOpen = false;
   bool _ending = false;
+  // 약사가 한 번이라도 들어왔는지. 이후 사라지면 '나갔다'로 안내한다.
+  bool _remoteSeen = false;
+  bool _remoteLeft = false;
 
   @override
   void initState() {
@@ -100,7 +103,28 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
   }
 
   void _callChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final call = _call!;
+    final present =
+        call.phase == CallPhase.connected && call.hasRemoteParticipant;
+    final left =
+        _remoteSeen &&
+        !present &&
+        call.phase == CallPhase.connected &&
+        !_serverEnded &&
+        !_ending;
+    if (left && !_remoteLeft) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('약사가 상담방에서 나갔어요.'),
+          duration: Duration(seconds: 5),
+        ),
+      );
+    }
+    setState(() {
+      if (present) _remoteSeen = true;
+      _remoteLeft = left;
+    });
   }
 
   @override
@@ -380,7 +404,9 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
       CallPhase.idle || CallPhase.connecting => '영상통화에 연결하는 중이에요.',
       CallPhase.connected =>
         !_call.hasRemoteParticipant
-            ? '상대방 입장을 기다리고 있어요.'
+            ? _remoteLeft
+                  ? '약사가 상담방에서 나갔어요.'
+                  : '상대방 입장을 기다리고 있어요.'
             : !_call.remoteHasVideo
             ? '상대방 카메라가 꺼져 있어요. 음성으로 상담할 수 있어요.'
             : '영상통화 연결됨',

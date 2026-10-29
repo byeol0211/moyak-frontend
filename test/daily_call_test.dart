@@ -301,6 +301,24 @@ void main() {
     },
   );
 
+  testWidgets('pharmacist leaving the call is announced', (tester) async {
+    final call = FakeCall()..hasRemoteParticipant = false;
+    await openCall(tester, call);
+    expect(find.text('상대방 입장을 기다리고 있어요.'), findsWidgets);
+    call
+      ..hasRemoteParticipant = true
+      ..update();
+    await tester.pump();
+    call
+      ..hasRemoteParticipant = false
+      ..remoteHasVideo = false
+      ..update();
+    await tester.pump();
+    expect(find.text('약사가 상담방에서 나갔어요.'), findsWidgets);
+    await tester.pumpWidget(const SizedBox());
+    call.dispose();
+  });
+
   testWidgets('patient leaves media without calling server end', (
     tester,
   ) async {

@@ -3,20 +3,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_picker/image_picker.dart';
 
-import '../data/api_client.dart';
 import '../data/auth_session.dart';
-import '../data/pill_api.dart';
+import '../widgets/pill_photo_sheet.dart';
 
 import '../widgets/consult_header.dart';
 import '../config/app_config.dart';
 import '../data/app_session.dart';
-
-/// 알약 사진을 고르는 방법. 테스트에서는 가짜 사진을 돌려준다. 취소하면 null.
-typedef PillPhotoPicker = Future<List<PillPhoto>?> Function(
-  BuildContext context,
-);
 
 /// 모약이 챗봇: 의약품 질문에 답하고, 답변마다 약사 상담으로 이어지는 버튼을 보여준다.
 class ChatPage extends StatefulWidget {
@@ -24,7 +17,6 @@ class ChatPage extends StatefulWidget {
     this.client,
     this.onScanQr,
     this.onRequestConsult,
-    this.pickPhotos,
     super.key,
   });
 
@@ -34,27 +26,21 @@ class ChatPage extends StatefulWidget {
   /// "약사에게 바로 상담하기" — 지금까지의 대화를 약사 상담 대기 화면으로 넘긴다.
   final VoidCallback? onRequestConsult;
 
-  /// 없으면 카메라/앨범 선택 시트를 띄운다.
-  final PillPhotoPicker? pickPhotos;
-
   @override
   State<ChatPage> createState() => _ChatPageState();
 }
 
 class _ChatPageState extends State<ChatPage> {
   late final http.Client _client = widget.client ?? http.Client();
-  late final PillApi _pills = PillApi(client: widget.client);
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final _messages = <Map<String, dynamic>>[];
   bool _busy = false;
-  String _busyText = '답변중입니다...';
   String? _error;
 
   @override
   void dispose() {
     if (widget.client == null) _client.close();
-    _pills.close();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -73,10 +59,8 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _sendMessage([String? text]) async {
     final question = (text ?? _messageController.text).trim();
     if (question.isEmpty || _busy) return;
-    // 알약 사진 결과(role: pill)는 화면용이라 /chat 대화 기록에 넣지 않는다.
-    final history = _messages
-        .where((m) => m['complete'] == true && m['role'] != 'pill')
-        .toList();
+    // 알약 사진 메시지는 complete가 없어 /chat 대화 기록에 들어가지 않는다.
+    final history = _messages.where((m) => m['complete'] == true).toList();
     final recent = history
         .skip(history.length > 20 ? history.length - 20 : 0)
         .map((m) => {'role': m['role'], 'content': m['content']})
@@ -84,7 +68,6 @@ class _ChatPageState extends State<ChatPage> {
     final message = <String, dynamic>{'role': 'user', 'content': question};
     setState(() {
       _busy = true;
-      _busyText = '답변중입니다...';
       _error = null;
       _messages.add(message);
       _syncSummary();
@@ -155,88 +138,35 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  /// 📷 버튼: 알약 사진(앞면, 선택으로 뒷면)을 올려 약 후보를 받는다.
-  Future<void> _findPillByPhoto() async {
+  Future<void> _attachPhotos() async {
     if (_busy) return;
-    final picker = widget.pickPhotos ?? _pickPhotosFromDevice;
-    final List<PillPhoto>? photos;
-    try {
-      photos = await picker(context);
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = '사진을 불러오지 못했어요. 카메라·사진 권한을 확인해주세요.');
-      }
-      return;
-    }
-    if (photos == null || photos.isEmpty || !mounted) return;
-    final request = <String, dynamic>{
-      'role': 'photo',
-      'content': '알약 사진으로 약 찾기 (${photos.length}장)',
-      'photos': photos,
-    };
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: consultCream,
+      builder: (_) =>
+          PillPhotoSheet(client: _client, testMode: widget.client != null),
+    );
+    if (!mounted || result == null) return;
     setState(() {
-      _busy = true;
-      _busyText = '사진 속 알약을 살펴보는 중이에요... (15초 정도 걸려요)';
-      _error = null;
-      _messages.add(request);
+      _messages.add({
+        'role': 'user',
+        'content': '알약 사진',
+        'photos': result['photos'],
+      });
+      _messages.add({
+        'role': 'assistant',
+        'content': result['message'],
+        'pillResult': result,
+      });
     });
     _scrollToBottom();
-    try {
-      final preview = AppConfig.preview.value && widget.client == null;
-      final result = preview
-          ? _previewPillResult
-          : await _pills.identify(photos);
-      if (!mounted) return;
-      setState(() => _messages.add({'role': 'pill', 'result': result}));
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _messages.remove(request);
-          _error = e is ApiException
-              ? e.message
-              : '알약을 찾지 못했어요. 잠시 후 다시 시도해주세요.';
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-        _scrollToBottom();
-      }
-    }
   }
 
-  Future<List<PillPhoto>?> _pickPhotosFromDevice(BuildContext context) async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: consultHeaderCream,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => const _PhotoSourceSheet(),
-    );
-    if (source == null) return null;
-    final picker = ImagePicker();
-    // JPEG로 줄여 보낸다: 서버 한도(8MB) 안쪽이고 아이폰 HEIC도 서버가 읽을 수 있다.
-    const maxWidth = 1600.0;
-    const quality = 85;
-    final files = source == ImageSource.camera
-        ? [
-            ?await picker.pickImage(
-              source: ImageSource.camera,
-              maxWidth: maxWidth,
-              imageQuality: quality,
-            ),
-          ]
-        : await picker.pickMultiImage(
-            maxWidth: maxWidth,
-            imageQuality: quality,
-            limit: 2,
-          );
-    if (files.isEmpty) return null;
-    return [
-      for (final f in files.take(2))
-        PillPhoto(bytes: await f.readAsBytes(), name: f.name),
-    ];
+  void _explainPill(String name) {
+    if (_busy) return;
+    _messageController.text = '${name}에 대해 설명해 주세요. 효능이랑 주의사항도 알려 주세요.';
+    _sendMessage();
   }
 
   void _syncSummary() {
@@ -285,22 +215,15 @@ class _ChatPageState extends State<ChatPage> {
                 const _TrustLine(),
                 for (final message in _messages) ...[
                   const SizedBox(height: 10),
-                  if (message['role'] == 'user')
+                  if (message['photos'] != null)
+                    PillPhotoThumbnails(photos: message['photos'])
+                  else if (message['pillResult'] != null)
+                    PillResultCard(
+                      data: message['pillResult'],
+                      onExplain: _busy ? null : _explainPill,
+                    )
+                  else if (message['role'] == 'user')
                     _QuestionBubble(text: message['content'] as String)
-                  else if (message['role'] == 'photo')
-                    _PhotoBubble(
-                      text: message['content'] as String,
-                      photos: message['photos'] as List<PillPhoto>,
-                    )
-                  else if (message['role'] == 'pill')
-                    _PillResultCard(
-                      result: message['result'] as PillResult,
-                      onAsk: _busy
-                          ? null
-                          : (candidate) => _sendMessage(
-                              '${candidate.itemName}은(는) 어떤 약인가요?',
-                            ),
-                    )
                   else ...[
                     _AnswerCard(
                       answer: message['content'] as String,
@@ -325,7 +248,7 @@ class _ChatPageState extends State<ChatPage> {
                 ],
                 if (_busy) ...[
                   const SizedBox(height: 10),
-                  _SystemNote(text: _busyText),
+                  const _SystemNote(text: '답변중입니다...'),
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 10),
@@ -342,7 +265,7 @@ class _ChatPageState extends State<ChatPage> {
             controller: _messageController,
             busy: _busy,
             onSend: _sendMessage,
-            onPhoto: _findPillByPhoto,
+            onAttach: _attachPhotos,
           ),
         ],
       ),
@@ -778,17 +701,17 @@ class _Composer extends StatelessWidget {
     required this.controller,
     required this.busy,
     required this.onSend,
-    required this.onPhoto,
+    required this.onAttach,
   });
 
   final TextEditingController controller;
   final bool busy;
   final VoidCallback onSend;
-  final VoidCallback onPhoto;
+  final VoidCallback onAttach;
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(12, 10, 16, 12),
+    padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
     decoration: const BoxDecoration(
       color: Colors.white,
       border: Border(top: BorderSide(color: consultLine)),
@@ -796,20 +719,11 @@ class _Composer extends StatelessWidget {
     child: Row(
       children: [
         IconButton(
-          key: const Key('chat-pill-photo'),
-          tooltip: '알약 사진으로 찾기',
-          onPressed: busy ? null : onPhoto,
-          style: IconButton.styleFrom(
-            backgroundColor: consultMint,
-            foregroundColor: consultDeepGreen,
-            fixedSize: const Size(48, 48),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          icon: const Icon(Icons.photo_camera_outlined, size: 22),
+          key: const Key('chat-attach'),
+          tooltip: '알약 사진 첨부',
+          onPressed: busy ? null : onAttach,
+          icon: const Icon(Icons.add),
         ),
-        const SizedBox(width: 8),
         Expanded(
           child: SizedBox(
             height: 48,
@@ -970,31 +884,6 @@ const _previewAnswer = {
     },
   ],
 };
-
-const _previewPillResult = PillResult(
-  candidates: [
-    PillCandidate(
-      itemSeq: 'preview-1',
-      itemName: '예시 알약 A',
-      company: '미리보기 제약',
-      shape: '원형',
-      color: '하양',
-      printFront: 'AB',
-      matched: ['모양', '색'],
-    ),
-    PillCandidate(
-      itemSeq: 'preview-2',
-      itemName: '예시 알약 B',
-      company: '미리보기 제약',
-      shape: '타원형',
-      color: '하양',
-    ),
-  ],
-  confident: false,
-  message:
-      '[화면 미리보기] 사진과 비슷한 약을 찾았어요. 사진만으로는 확실하지 않으니, '
-      '가지고 계신 약과 같은 것을 골라 설명을 들어 보세요.',
-);
 
 const _recCream = Color(0xFFFFFCF0);
 const _recLine = Color(0xFFEFE3BF);
@@ -1184,336 +1073,3 @@ class _RecommendationSection extends StatelessWidget {
 }
 
 /// 사용자가 올린 알약 사진 (오른쪽 말풍선).
-class _PhotoBubble extends StatelessWidget {
-  const _PhotoBubble({required this.text, required this.photos});
-
-  final String text;
-  final List<PillPhoto> photos;
-
-  @override
-  Widget build(BuildContext context) => Align(
-    alignment: Alignment.centerRight,
-    child: Container(
-      padding: const EdgeInsets.all(8),
-      decoration: const BoxDecoration(
-        color: consultGreen,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(5),
-          bottomLeft: Radius.circular(16),
-          bottomRight: Radius.circular(16),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final (i, photo) in photos.indexed) ...[
-                if (i > 0) const SizedBox(width: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.memory(
-                    Uint8List.fromList(photo.bytes),
-                    width: 96,
-                    height: 96,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const SizedBox(
-                      width: 96,
-                      height: 96,
-                      child: Icon(Icons.image_outlined, color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-/// `/pills/identify` 결과: 안내 문장 + 후보 약 목록. 후보를 누르면 그 약을 챗봇에 물어본다.
-class _PillResultCard extends StatelessWidget {
-  const _PillResultCard({required this.result, required this.onAsk});
-
-  final PillResult result;
-  final ValueChanged<PillCandidate>? onAsk;
-
-  @override
-  Widget build(BuildContext context) {
-    // 확실할 때만 1위 하나를, 아니면 여러 개를 보여주고 고르게 한다(백엔드 안내).
-    final shown = result.candidates.take(result.confident ? 1 : 5);
-    return Container(
-      key: const Key('pill-result'),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: consultLine),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x1449382F),
-            blurRadius: 18,
-            offset: Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: consultMint,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.medication_outlined,
-                  color: consultDeepGreen,
-                  size: 17,
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  '사진으로 찾은 약',
-                  style: TextStyle(
-                    color: consultBrown,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            result.message,
-            style: const TextStyle(
-              color: consultBrown,
-              fontSize: 15,
-              height: 1.5,
-            ),
-          ),
-          if (result.note != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              result.note!,
-              style: const TextStyle(
-                color: consultMutedBrown,
-                fontSize: 12.5,
-                height: 1.45,
-              ),
-            ),
-          ],
-          for (final candidate in shown) ...[
-            const SizedBox(height: 10),
-            _PillCandidateTile(
-              candidate: candidate,
-              onTap: onAsk == null ? null : () => onAsk!(candidate),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF2C9),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.warning_amber_rounded,
-                  color: Color(0xFFB98A00),
-                  size: 18,
-                ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '사진만으로는 틀릴 수 있어요. 드시기 전에 약 봉투나 약사에게 꼭 확인하세요.',
-                    style: TextStyle(
-                      color: consultBrown,
-                      fontSize: 12,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PillCandidateTile extends StatelessWidget {
-  const _PillCandidateTile({required this.candidate, required this.onTap});
-
-  final PillCandidate candidate;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final imprint = [
-      candidate.printFront,
-      candidate.printBack,
-    ].whereType<String>().where((s) => s.trim().isNotEmpty).join(' / ');
-    final details = [
-      candidate.company,
-      [candidate.color, candidate.shape].whereType<String>().join(' '),
-      if (imprint.isNotEmpty) '각인 $imprint',
-    ].whereType<String>().where((s) => s.trim().isNotEmpty).join(' · ');
-    return Material(
-      color: _recCream,
-      shape: RoundedRectangleBorder(
-        side: const BorderSide(color: _recLine),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        key: Key('pill-candidate-${candidate.itemSeq}'),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
-                  width: 64,
-                  height: 64,
-                  child: candidate.imageUrl == null
-                      ? const _PillImagePlaceholder()
-                      : Image.network(
-                          candidate.imageUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) =>
-                              const _PillImagePlaceholder(),
-                        ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      candidate.itemName,
-                      style: const TextStyle(
-                        color: consultBrown,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        height: 1.35,
-                      ),
-                    ),
-                    if (details.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        details,
-                        style: const TextStyle(
-                          color: consultMutedBrown,
-                          fontSize: 12,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 6),
-                    const Text(
-                      '이 약 설명 듣기 ›',
-                      style: TextStyle(
-                        color: consultGreen,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PillImagePlaceholder extends StatelessWidget {
-  const _PillImagePlaceholder();
-
-  @override
-  Widget build(BuildContext context) => const ColoredBox(
-    color: consultBeige,
-    child: Icon(Icons.medication_outlined, color: consultMutedBrown, size: 28),
-  );
-}
-
-/// 📷 버튼을 누르면 뜨는 선택 시트: 카메라로 찍기 / 앨범에서 고르기(앞·뒷면 최대 2장).
-class _PhotoSourceSheet extends StatelessWidget {
-  const _PhotoSourceSheet();
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            '알약 사진으로 찾기',
-            style: TextStyle(
-              color: consultBrown,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            '밝은 곳에서 알약 한 알을 가까이 찍어 주세요. 뒷면 사진도 있으면 더 정확해요.',
-            style: TextStyle(
-              color: consultMutedBrown,
-              fontSize: 13,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 14),
-          ListTile(
-            leading: const Icon(
-              Icons.photo_camera_outlined,
-              color: consultGreen,
-            ),
-            title: const Text('카메라로 찍기'),
-            onTap: () => Navigator.of(context).pop(ImageSource.camera),
-          ),
-          ListTile(
-            leading: const Icon(
-              Icons.photo_library_outlined,
-              color: consultGreen,
-            ),
-            title: const Text('앨범에서 고르기 (최대 2장)'),
-            onTap: () => Navigator.of(context).pop(ImageSource.gallery),
-          ),
-        ],
-      ),
-    ),
-  );
-}

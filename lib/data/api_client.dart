@@ -86,20 +86,6 @@ class ApiClient {
         .timeout(const Duration(seconds: 20)),
   );
 
-  /// 사진 업로드처럼 파일을 보내는 요청(`multipart/form-data`).
-  Future<dynamic> postFiles(
-    String path, {
-    required List<http.MultipartFile> files,
-    Map<String, String>? query,
-    Duration timeout = const Duration(seconds: 20),
-  }) async {
-    final request = http.MultipartRequest('POST', uri(path, query))
-      ..headers.addAll(AuthSession.headers())
-      ..files.addAll(files);
-    final streamed = await _client.send(request).timeout(timeout);
-    return _decode(await http.Response.fromStream(streamed).timeout(timeout));
-  }
-
   /// 서버는 실패 시 `{"detail": "한국어 메시지"}`를 준다.
   dynamic _decode(http.Response response) {
     dynamic data;
