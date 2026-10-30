@@ -259,14 +259,16 @@ void main() {
       var requests = 0;
       final client = MockClient((request) async {
         requests++;
-        if (request.url.path.endsWith('/presence'))
+        if (request.url.path.endsWith('/presence')) {
           return _json({
             'available': true,
             'participants': 1,
             'pharmacist_in_room': false,
           });
-        if (request.url.path == '/consultations' && request.method == 'GET')
+        }
+        if (request.url.path == '/consultations' && request.method == 'GET') {
           return _json([]);
+        }
         return _json(_consultation());
       });
       await tester.pumpWidget(

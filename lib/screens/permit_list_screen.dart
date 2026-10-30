@@ -100,6 +100,7 @@ class _PermitCard extends StatelessWidget {
     PermitStatus.expired => '기간 만료',
     PermitStatus.dispensed => '수령 완료',
     PermitStatus.cancelled => '취소됨',
+    PermitStatus.unknown => '상태 확인 필요',
   };
 
   @override

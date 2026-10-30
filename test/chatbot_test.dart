@@ -28,10 +28,16 @@ void main() {
         home: Scaffold(body: ChatPage(client: client)),
       ),
     );
+    expect(find.text('안녕하세요, 전 모약이에요!'), findsOneWidget);
+    expect(find.text('약에 대해 궁금하신 점이 있나요?'), findsOneWidget);
+    expect(requests, isEmpty);
+    expect(find.text('도움돼요'), findsNothing);
     await tester.enterText(find.byType(TextField), 'first');
     await tester.tap(find.byKey(const Key('chat-send')));
     await tester.pumpAndSettle();
     expect(find.text('answer 1'), findsOneWidget);
+    expect(find.text('도움돼요'), findsOneWidget);
+    expect(requests.first['history'], isEmpty);
     await tester.enterText(find.byType(TextField), 'second');
     await tester.testTextInput.receiveAction(TextInputAction.send);
     await tester.pumpAndSettle();

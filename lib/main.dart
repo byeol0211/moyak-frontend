@@ -28,6 +28,7 @@ import 'config/app_config.dart';
 import 'data/app_session.dart';
 import 'widgets/feature_notice.dart';
 import 'widgets/machine_switch_sheet.dart';
+import 'widgets/home_pickup_notice.dart';
 
 void main() {
   if (kakaoJavaScriptKey.isNotEmpty) {
@@ -216,6 +217,9 @@ class _AppShellState extends State<AppShell> {
   /// 연결된(선택한) 자판기. null이면 연결 없음 홈을 보여준다.
   VendingMachine? _connectedMachine;
   bool _machinePaired = false;
+  String? _machineDistanceLabel;
+  int _distanceGeneration = 0;
+  int _pickupRevision = 0;
 
   // 진행 중인 상담은 탭을 옮겨도 유지하고, 끝났거나 취소됐으면 새로 요청한다.
   int _consultSession = 0;
@@ -329,11 +333,11 @@ class _AppShellState extends State<AppShell> {
   static const _defaultScanLatitude = 37.4509;
   static const _defaultScanLongitude = 126.6539;
 
-  Future<Position?> _scanPosition() async {
+  Future<Position?> _scanPosition({bool requestPermission = true}) async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) return null;
       var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
+      if (permission == LocationPermission.denied && requestPermission) {
         permission = await Geolocator.requestPermission();
       }
       if (permission == LocationPermission.denied ||
@@ -372,6 +376,7 @@ class _AppShellState extends State<AppShell> {
             final result = scanned;
             if (result != null) {
               _connectMachine(result.machine, paired: true);
+              setState(() => _pickupRevision++);
               final drug = result.approvedDrugName;
               showFeatureNotice(
                 context,
@@ -393,7 +398,34 @@ class _AppShellState extends State<AppShell> {
       _connectedMachine = machine;
       _machinePaired = paired;
       selectedIndex = 0;
+      _machineDistanceLabel = '거리 확인 중...';
     });
+    _refreshMachineDistance(machine);
+  }
+
+  Future<void> _refreshMachineDistance(VendingMachine machine) async {
+    final generation = ++_distanceGeneration;
+    final position = AppConfig.preview.value
+        ? null
+        : await _scanPosition(requestPermission: false);
+    if (!mounted ||
+        generation != _distanceGeneration ||
+        _connectedMachine?.id != machine.id) {
+      return;
+    }
+    String label = '위치를 확인하면 거리를 표시해요';
+    if (position != null && (machine.latitude != 0 || machine.longitude != 0)) {
+      final meters = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        machine.latitude,
+        machine.longitude,
+      );
+      label = meters < 1000
+          ? '내 위치에서 약 ${meters.round()}m'
+          : '내 위치에서 약 ${(meters / 1000).toStringAsFixed(1)}km';
+    }
+    setState(() => _machineDistanceLabel = label);
   }
 
   /// 메인 화면 '선택됨' 배지: 주변 자판기 중 다른 자판기로 바꾼다.
@@ -469,16 +501,31 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final machine = _connectedMachine;
+    final consultation = AppSession.instance.consultation;
+    final pickupNotice = HomePickupNotice(
+      key: ValueKey('pickup-${AppSession.instance.userId}'),
+      active: selectedIndex == 0,
+      refreshKey:
+          '${consultation?.id}-${consultation?.status}-${consultation?.endedAt}-$_pickupRevision',
+      loadPermits: () =>
+          AppConfig.preview.value ? fetchPermits() : _loadPermits(),
+      onScanQr: _openQrScanner,
+      onOpenPermits: _openPermitList,
+    );
     final pages = [
       machine != null
           ? MainHomeConnectedScreen(
               machineName: machine.name,
+              distanceLabel: _machineDistanceLabel,
+              operatingHours: machine.operatingHours,
+              pickupNotice: pickupNotice,
               paired: _machinePaired,
               onScanQr: _openQrScanner,
               onOpenStore: () => _openMachineStore(machine),
               onChangeMachine: () => _changeMachine(machine),
             )
           : MainHomeDisconnectedScreen(
+              pickupNotice: pickupNotice,
               onScanQr: _openQrScanner,
               onRescanDevice: _rescanDevices,
               isScanning: _isScanningDevices,

@@ -216,8 +216,9 @@ void main() {
     var entered = false;
     final auth = AuthApi(
       client: MockClient((request) async {
-        if (request.url.path.endsWith('username-available'))
+        if (request.url.path.endsWith('username-available')) {
           return json({'available': true});
+        }
         expect(request.url.path, '/auth/signup');
         expect(jsonDecode(request.body), {
           'username': 'tester',

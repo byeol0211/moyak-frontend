@@ -67,9 +67,11 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
       };
   RecordingConsentState? _consentState;
   bool _consentPolling = false;
+  int _consentRevision = 0;
   bool _consenting = false;
   bool _consentDismissed = false;
   String? _consentError;
+  String? _consentStatusError;
   Timer? _chatTimer;
   bool _polling = false;
   bool _sending = false;
@@ -155,34 +157,61 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
     final recording = _recording;
     if (recording == null ||
         _consentPolling ||
+        _consenting ||
+        _ending ||
         _serverEnded ||
         _consentState?.bothConsented == true ||
         _consentState?.ended == true) {
       return;
     }
-    _consentPolling = true;
+    setState(() => _consentPolling = true);
+    final revision = _consentRevision;
     try {
       final state = await recording.status();
-      if (mounted) setState(() => _consentState = state);
-    } catch (_) {
-      // 동의 상태는 부가 기능이라 통화·채팅을 막지 않는다. 다음 확인 때 다시 본다.
+      if (mounted &&
+          revision == _consentRevision &&
+          !_ending &&
+          !_serverEnded) {
+        setState(() {
+          _consentState = state;
+          _consentStatusError = null;
+        });
+      }
+    } catch (error) {
+      if (mounted &&
+          revision == _consentRevision &&
+          !_ending &&
+          !_serverEnded) {
+        setState(
+          () => _consentStatusError = error is StateError
+              ? error.message.toString()
+              : 'AI 요약 동의 상태를 확인하지 못했어요.',
+        );
+      }
     } finally {
-      _consentPolling = false;
+      if (mounted) setState(() => _consentPolling = false);
     }
   }
 
   Future<void> _giveConsent() async {
     final recording = _recording;
-    if (recording == null || _consenting) return;
+    if (recording == null || _consenting || _ending || _serverEnded) return;
+    // Ignore status requests sent before this user's consent action.
+    _consentRevision++;
     setState(() {
       _consenting = true;
       _consentError = null;
     });
     try {
       final state = await recording.consent();
-      if (mounted) setState(() => _consentState = state);
+      if (mounted && !_ending && !_serverEnded) {
+        setState(() {
+          _consentState = state;
+          _consentStatusError = null;
+        });
+      }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !_ending && !_serverEnded) {
         setState(
           () => _consentError = e is StateError
               ? e.message
@@ -196,9 +225,39 @@ class _VideoConsultationPageState extends State<VideoConsultationPage>
 
   Widget? _consentPanel() {
     final state = _consentState;
-    if (_recording == null || state == null || state.ended || _serverEnded) {
+    if (_recording == null || state?.ended == true || _serverEnded) {
       return null;
     }
+    if (_consentStatusError case final message?) {
+      return Material(
+        key: const Key('recording-consent-status-error'),
+        color: const Color(0xCC000000),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$message 통화는 계속할 수 있어요.',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+              TextButton(
+                key: const Key('recording-consent-retry'),
+                onPressed: _consentPolling ? null : _pollConsent,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  disabledForegroundColor: Colors.white70,
+                ),
+                child: Text(_consentPolling ? '확인 중...' : '재시도'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (state == null) return null;
     if (state.userConsented) {
       return _ConsentStatusChip(
         text: state.pharmacistConsented

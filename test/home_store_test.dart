@@ -40,7 +40,7 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.bySemanticsLabel('강남역 자판기 구매 화면 열기'));
+    await tester.tap(find.bySemanticsLabel('강남역 자판기 재고 보기'));
     await tester.pumpAndSettle();
     expect(find.text('자판기 재고'), findsOneWidget);
     expect(find.text('타이레놀'), findsOneWidget);
@@ -97,7 +97,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: CareProfilePage(api: api)));
     await tester.pumpAndSettle();
 
-    final save = find.widgetWithText(FilledButton, '참고사항 저장');
+    final save = find.widgetWithText(FilledButton, '저장하기');
     expect(save, findsOneWidget);
     // 목록 안이 아니라 하단 고정 영역에 있다.
     expect(

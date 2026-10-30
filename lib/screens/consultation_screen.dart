@@ -841,7 +841,7 @@ class _WaitingCard extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         const Text(
-          '앱을 잠시 벗어나도 이 화면으로 돌아오면 진행 상황이 이어서 보여요.',
+          '잠시 나갔다 와도 상담은 이어져요.',
           textAlign: TextAlign.center,
           style: TextStyle(color: _muted, fontSize: 14, height: 1.5),
         ),

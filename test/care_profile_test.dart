@@ -17,6 +17,68 @@ void main() {
   tearDown(AuthSession.clear);
 
   testWidgets(
+    'new cards keep unknown answers empty and save selections and medication',
+    (tester) async {
+      tester.view.physicalSize = const Size(380, 760);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final data = <String, dynamic>{
+        'revision': 'r1',
+        'care_note': '',
+        'conditions': [],
+        'medications': [],
+      };
+      Map<String, dynamic>? saved;
+      final api = ApiClient(
+        client: MockClient((request) async {
+          if (request.method == 'PATCH') {
+            saved = jsonDecode(request.body) as Map<String, dynamic>;
+          }
+          return http.Response(
+            jsonEncode(data),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+      await tester.pumpWidget(MaterialApp(home: CareProfilePage(api: api)));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widgetList<FilterChip>(find.byType(FilterChip))
+            .every((chip) => !chip.selected),
+        isTrue,
+      );
+      await tester.tap(find.text('페니실린계 항생제'));
+      await tester.pump();
+      await tester.tap(find.text('알러지 없음'));
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilterChip>(find.widgetWithText(FilterChip, '페니실린계 항생제'))
+            .selected,
+        isFalse,
+      );
+      final drug = find.widgetWithText(TextFormField, '약 이름을 입력하세요');
+      await tester.scrollUntilVisible(
+        drug,
+        220,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.enterText(drug, '타이레놀 500mg');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('저장하기'));
+      await tester.pumpAndSettle();
+      expect((saved!['conditions'] as List).single['label'], '알러지 없음');
+      expect((saved!['medications'] as List).single['drug_name'], '타이레놀 500mg');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'loads structured data and saves with Bearer; preserves read-only medications',
     (tester) async {
       final data = <String, dynamic>{
@@ -44,8 +106,9 @@ void main() {
         client: MockClient((request) async {
           expect(request.headers['Authorization'], 'Bearer test-token');
           expect(request.url.path, '/auth/me/care-profile');
-          if (request.method == 'PATCH')
+          if (request.method == 'PATCH') {
             saved = jsonDecode(request.body) as Map<String, dynamic>;
+          }
           return http.Response(
             jsonEncode(data),
             200,
@@ -66,11 +129,11 @@ void main() {
         '상담 때 확인해주세요',
       );
       await tester.scrollUntilVisible(
-        find.text('참고사항 저장'),
+        find.text('저장하기'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.tap(find.text('참고사항 저장'));
+      await tester.tap(find.text('저장하기'));
       await tester.pumpAndSettle();
       expect(saved!['care_note'], '상담 때 확인해주세요');
       expect(
@@ -93,7 +156,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: CareProfilePage(api: api)));
     await tester.pumpAndSettle();
     expect(find.text('Login required'), findsOneWidget);
-    expect(find.text('참고사항 저장'), findsNothing);
+    expect(find.text('저장하기'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
@@ -111,7 +174,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(calls, 0);
       expect(find.textContaining('상담 참고사항은 로그인 후'), findsOneWidget);
-      expect(find.text('참고사항 저장'), findsNothing);
+      expect(find.text('저장하기'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
@@ -130,7 +193,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('다시 불러오기'), findsOneWidget);
-      expect(find.text('참고사항 저장'), findsNothing);
+      expect(find.text('저장하기'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

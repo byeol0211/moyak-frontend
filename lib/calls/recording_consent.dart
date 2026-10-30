@@ -55,12 +55,17 @@ class ApiRecordingConsent implements RecordingConsent {
   }
 
   /// 로그인 토큰이 있으면 Bearer, 게스트면 서버의 팀 방식 신원 헤더를 쓴다.
-  Map<String, String> _headers() => AuthSession.isAuthenticated
-      ? AuthSession.headers()
-      : {
-          'X-Moyak-User-Id': Uri.encodeComponent(userId),
-          'X-Moyak-Role': 'user',
-        };
+  Map<String, String> _headers() {
+    // headers() rejects expired credentials; only a session with no token is
+    // allowed to use the guest identity. Expiry must not downgrade authentication.
+    final authenticatedHeaders = AuthSession.headers();
+    return authenticatedHeaders.isNotEmpty
+        ? authenticatedHeaders
+        : {
+            'X-Moyak-User-Id': Uri.encodeComponent(userId),
+            'X-Moyak-Role': 'user',
+          };
+  }
 
   RecordingConsentState _decode(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {

@@ -91,7 +91,7 @@ class ConsultRecord {
   final DateTime? endedAt;
 }
 
-enum PermitStatus { available, expired, dispensed, cancelled }
+enum PermitStatus { available, expired, dispensed, cancelled, unknown }
 
 class PermitRecord {
   const PermitRecord({

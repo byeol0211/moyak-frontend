@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -13,9 +14,17 @@ class FakeRecordingConsent implements RecordingConsent {
 
   RecordingConsentState? state;
   int consentCalls = 0;
+  bool failStatus = false;
+  Completer<RecordingConsentState?>? pendingStatus;
+  int statusCalls = 0;
 
   @override
-  Future<RecordingConsentState?> status() async => state;
+  Future<RecordingConsentState?> status() async {
+    statusCalls++;
+    if (pendingStatus != null) return pendingStatus!.future;
+    if (failStatus) throw StateError('동의 상태를 확인하지 못했어요.');
+    return state;
+  }
 
   @override
   Future<RecordingConsentState> consent() async {
@@ -35,6 +44,102 @@ Widget _page(RecordingConsent recording) =>
     MaterialApp(home: VideoConsultationPage(recording: recording));
 
 void main() {
+  for (final failOldRequest in [false, true]) {
+    testWidgets(
+      'late status ${failOldRequest ? 'error' : 'response'} cannot overwrite successful consent',
+      (tester) async {
+        const before = RecordingConsentState(
+          userConsented: false,
+          pharmacistConsented: true,
+          ended: false,
+        );
+        final recording = FakeRecordingConsent(before);
+        await tester.pumpWidget(_page(recording));
+        await tester.pump();
+        await tester.pump();
+        recording.pendingStatus = Completer<RecordingConsentState?>();
+        await tester.pump(const Duration(seconds: 3));
+        expect(recording.statusCalls, 2);
+        await tester.tap(find.byKey(const Key('recording-consent-agree')));
+        await tester.pump();
+        await tester.pump();
+        expect(
+          find.byKey(const Key('recording-consent-status')),
+          findsOneWidget,
+        );
+        if (failOldRequest) {
+          recording.pendingStatus!.completeError(
+            StateError('old request failed'),
+          );
+        } else {
+          recording.pendingStatus!.complete(before);
+        }
+        await tester.pump();
+        await tester.pump();
+        expect(
+          find.byKey(const Key('recording-consent-status')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('recording-consent-card')), findsNothing);
+        expect(
+          find.byKey(const Key('recording-consent-status-error')),
+          findsNothing,
+        );
+        expect(recording.consentCalls, 1);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+  testWidgets('status failure shows retry and recovers to consent card', (
+    tester,
+  ) async {
+    final recording = FakeRecordingConsent(
+      const RecordingConsentState(
+        userConsented: false,
+        pharmacistConsented: true,
+        ended: false,
+      ),
+    )..failStatus = true;
+    await tester.pumpWidget(_page(recording));
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const Key('recording-consent-status-error')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('통화는 계속할 수 있어요'), findsOneWidget);
+    expect(recording.consentCalls, 0);
+    recording.failStatus = false;
+    await tester.tap(find.byKey(const Key('recording-consent-retry')));
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const Key('recording-consent-status-error')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('recording-consent-card')), findsOneWidget);
+  });
+  testWidgets(
+    'automatic status retry recovers without showing error for unassigned session',
+    (tester) async {
+      final recording = FakeRecordingConsent(null)..failStatus = true;
+      await tester.pumpWidget(_page(recording));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const Key('recording-consent-status-error')),
+        findsOneWidget,
+      );
+      recording.failStatus = false;
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+      expect(
+        find.byKey(const Key('recording-consent-status-error')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('recording-consent-card')), findsNothing);
+    },
+  );
   testWidgets(
     'consent card appears after pharmacist connects and sends consent',
     (tester) async {
@@ -93,7 +198,36 @@ void main() {
   });
 
   group('ApiRecordingConsent', () {
+    setUp(AuthSession.clear);
     tearDown(AuthSession.clear);
+
+    test(
+      'expired login cannot fall back to guest or send any consent requests',
+      () async {
+        AuthSession.set('expired-token', -1);
+        var calls = 0;
+        final api = ApiRecordingConsent(
+          consultationId: 'c1',
+          userId: 'account-user',
+          client: MockClient((_) async {
+            calls++;
+            return http.Response('{}', 200);
+          }),
+        );
+        await expectLater(
+          api.status(),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('로그인이 만료'),
+            ),
+          ),
+        );
+        await expectLater(api.consent(), throwsStateError);
+        expect(calls, 0);
+      },
+    );
 
     test('guest sends identity headers and 409 means not connected', () async {
       late http.Request seen;

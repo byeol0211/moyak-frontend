@@ -17,12 +17,14 @@ class _ScrollableHome extends StatelessWidget {
   Widget build(BuildContext context) => SafeArea(
     child: LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
-        child: SizedBox(
-          height: constraints.maxHeight.clamp(
-            700 * MediaQuery.textScalerOf(context).scale(1),
-            double.infinity,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: constraints.maxHeight.clamp(
+              700 * MediaQuery.textScalerOf(context).scale(1),
+              double.infinity,
+            ),
           ),
-          child: child,
+          child: IntrinsicHeight(child: child),
         ),
       ),
     ),
@@ -34,12 +36,14 @@ class MainHomeDisconnectedScreen extends StatelessWidget {
     required this.onScanQr,
     required this.onRescanDevice,
     this.isScanning = false,
+    this.pickupNotice,
     super.key,
   });
 
   final VoidCallback onScanQr;
   final VoidCallback onRescanDevice;
   final bool isScanning;
+  final Widget? pickupNotice;
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
@@ -64,6 +68,10 @@ class MainHomeDisconnectedScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _HomeHeader(onScanQr: onScanQr),
+                    if (pickupNotice != null) ...[
+                      const SizedBox(height: 16),
+                      pickupNotice!,
+                    ],
                     const SizedBox(height: 26),
                     const _HomeInfoBanner(),
                     const SizedBox(height: 20),
@@ -91,11 +99,17 @@ class MainHomeConnectedScreen extends StatelessWidget {
     this.paired = false,
     this.onOpenStore,
     this.onChangeMachine,
+    this.pickupNotice,
+    this.distanceLabel,
+    this.operatingHours,
     super.key,
   });
 
   /// 지도에서 고르거나 QR로 연결한 자판기 이름.
   final String machineName;
+  final Widget? pickupNotice;
+  final String? distanceLabel;
+  final String? operatingHours;
   final bool paired;
   final VoidCallback onScanQr;
 
@@ -128,6 +142,10 @@ class MainHomeConnectedScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _HomeHeader(onScanQr: onScanQr),
+                    if (pickupNotice != null) ...[
+                      const SizedBox(height: 16),
+                      pickupNotice!,
+                    ],
                     const SizedBox(height: 26),
                     const _HomeInfoBanner(),
                     const SizedBox(height: 20),
@@ -135,6 +153,8 @@ class MainHomeConnectedScreen extends StatelessWidget {
                       child: _ConnectedCard(
                         machineName: machineName,
                         paired: paired,
+                        distanceLabel: distanceLabel,
+                        operatingHours: operatingHours,
                         onOpenStore: onOpenStore,
                         onChangeMachine: onChangeMachine,
                       ),
@@ -435,10 +455,14 @@ class _ConnectedCard extends StatelessWidget {
     required this.paired,
     this.onOpenStore,
     this.onChangeMachine,
+    this.distanceLabel,
+    this.operatingHours,
   });
 
   final String machineName;
   final bool paired;
+  final String? distanceLabel;
+  final String? operatingHours;
   final VoidCallback? onOpenStore;
   final VoidCallback? onChangeMachine;
 
@@ -446,7 +470,7 @@ class _ConnectedCard extends StatelessWidget {
   Widget build(BuildContext context) => _HomeCard(
     child: _HomeCardContent(
       onImageTap: onOpenStore,
-      imageTapLabel: '$machineName 구매 화면 열기',
+      imageTapLabel: '$machineName 재고 보기',
       onBadgeTap: onChangeMachine,
       badgeTapHint: '다른 자판기로 변경',
       badge: '$machineName ${paired ? '연동됨' : '선택됨'}',
@@ -457,8 +481,47 @@ class _ConnectedCard extends StatelessWidget {
       image: 'assets/figma/moyak_1.png',
       imageLabel: '모약 자판기 마스코트',
       title: paired ? '자판기 연결 화면입니다' : '이용할 자판기를 선택했어요',
-      description:
-          '재고는 지도에서 자판기를 눌러 확인할 수 있어요. 실제 연결은 QR 스캔으로, 구매와 결제는 자판기에서 진행합니다.',
+      footer: Column(
+        children: [
+          const SizedBox(height: 14),
+          Text(
+            distanceLabel ?? '위치를 확인하면 거리를 표시해요',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _secondaryBrown, fontSize: 13),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            operatingHours == null || operatingHours!.trim().isEmpty
+                ? '운영시간 확인 필요'
+                : '운영시간 · $operatingHours',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _secondaryBrown, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: onOpenStore,
+                style: FilledButton.styleFrom(
+                  backgroundColor: _brandYellow,
+                  foregroundColor: _darkBrown,
+                ),
+                icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                label: const Text('재고 보기'),
+              ),
+              OutlinedButton.icon(
+                onPressed: onChangeMachine,
+                style: OutlinedButton.styleFrom(foregroundColor: _darkBrown),
+                icon: const Icon(Icons.swap_horiz, size: 18),
+                label: const Text('자판기 변경'),
+              ),
+            ],
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -497,12 +560,13 @@ class _HomeCardContent extends StatelessWidget {
     required this.image,
     required this.imageLabel,
     required this.title,
-    required this.description,
+    this.description,
     this.badgeBorder,
     this.onImageTap,
     this.imageTapLabel,
     this.onBadgeTap,
     this.badgeTapHint,
+    this.footer,
   });
 
   final String badge;
@@ -513,18 +577,19 @@ class _HomeCardContent extends StatelessWidget {
   final String image;
   final String imageLabel;
   final String title;
-  final String description;
+  final String? description;
   final VoidCallback? onImageTap;
   final String? imageTapLabel;
   final VoidCallback? onBadgeTap;
   final String? badgeTapHint;
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
     Widget mascot = Image.asset(
       image,
-      width: 300,
-      height: 300,
+      width: 225,
+      height: 225,
       fit: BoxFit.contain,
       semanticLabel: imageLabel,
     );
@@ -601,16 +666,19 @@ class _HomeCardContent extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          description,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: _secondaryBrown,
-            fontSize: 13.5,
-            height: 1.4,
+        if (description case final text?) ...[
+          const SizedBox(height: 6),
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _secondaryBrown,
+              fontSize: 13.5,
+              height: 1.4,
+            ),
           ),
-        ),
+        ],
+        ?footer,
       ],
     );
   }

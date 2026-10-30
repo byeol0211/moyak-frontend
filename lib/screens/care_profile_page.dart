@@ -17,6 +17,7 @@ class _CareProfilePageState extends State<CareProfilePage> {
   late final ApiClient _api = widget.api ?? ApiClient();
   final _form = GlobalKey<FormState>();
   final _note = TextEditingController();
+  final _drug = TextEditingController();
   final _conditions = <Map<String, dynamic>>[];
   final _medications = <Map<String, dynamic>>[];
   final _readOnly = <Map<String, dynamic>>[];
@@ -41,6 +42,7 @@ class _CareProfilePageState extends State<CareProfilePage> {
 
   void _apply(Map<String, dynamic> data) {
     _revision = data['revision'] as String;
+    _drug.clear();
     _note.text = data['care_note'] as String? ?? '';
     _conditions.clear();
     _medications.clear();
@@ -104,6 +106,13 @@ class _CareProfilePageState extends State<CareProfilePage> {
 
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
+    if (_medications.any(
+      (r) => (r['drug_name'] as String? ?? '').trim().isEmpty,
+    )) {
+      setState(() => _error = '복용 중인 약 이름을 입력해주세요.');
+      return;
+    }
+    if (_drug.text.trim().isNotEmpty && !_addDrug()) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -231,154 +240,553 @@ class _CareProfilePageState extends State<CareProfilePage> {
     );
   }
 
-  // 챗봇 화면과 같은 초록색으로 이 화면의 버튼들을 맞춘다.
+  static const _cream = Color(0xFFFFF7D5);
+  static const _yellow = Color(0xFFFFD54F);
+  static const _ink = Color(0xFF21443E);
+  static const _muted = Color(0xFF7A8C87);
+  static const _line = Color(0xFFBDD4CE);
+  static const _allergies = [
+    '알러지 없음',
+    '페니실린계 항생제',
+    '아스피린 · 소염진통제',
+    '설파제',
+    '조영제',
+    '식품(계란 · 우유 등)',
+  ];
+  static const _diseases = [
+    '해당 없음',
+    '고혈압',
+    '당뇨',
+    '천식',
+    '위 · 십이지장 질환',
+    '간 질환',
+    '신장 질환',
+    '심장 질환',
+    '녹내장',
+  ];
+
+  InputDecoration _input(String hint) => InputDecoration(
+    hintText: hint,
+    counterText: '',
+    filled: true,
+    fillColor: Colors.white,
+    hintStyle: const TextStyle(color: _muted, fontSize: 14),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _line, width: 1.5),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _line, width: 1.5),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: consultGreen, width: 1.5),
+    ),
+  );
+
+  bool _selected(String type, String label) => _conditions.any(
+    (r) => r['condition_type'] == type && r['label'] == label,
+  );
+  void _toggle(String type, String label) => setState(() {
+    if (_selected(type, label)) {
+      _conditions.removeWhere(
+        (r) => r['condition_type'] == type && r['label'] == label,
+      );
+      return;
+    }
+    final none = type == 'allergy' ? '알러지 없음' : '해당 없음';
+    if (label == none) {
+      _conditions.removeWhere((r) => r['condition_type'] == type);
+    } else {
+      _conditions.removeWhere(
+        (r) => r['condition_type'] == type && r['label'] == none,
+      );
+    }
+    if (_conditions.length < 30) {
+      _conditions.add({
+        '_key': _rowKey++,
+        'condition_type': type,
+        'label': label,
+      });
+    }
+  });
+
+  bool _addDrug() {
+    final name = _drug.text.trim();
+    if (name.isEmpty) return true;
+    if (_medications.length >= 30) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('복용약은 최대 30개까지 입력할 수 있어요.')));
+      return false;
+    }
+    setState(() {
+      _medications.add({'_key': _rowKey++, 'drug_name': name});
+      _drug.clear();
+    });
+    return true;
+  }
+
+  Widget _card(
+    int number,
+    String title,
+    List<Widget> children, {
+    String? hint,
+  }) => Container(
+    margin: const EdgeInsets.only(bottom: 16),
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
+      border: Border.all(color: const Color(0xFFF0E2AE)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 15,
+              backgroundColor: _yellow,
+              foregroundColor: _ink,
+              child: Text(
+                '$number',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: _ink,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            if (hint != null)
+              Text(hint, style: const TextStyle(color: _muted, fontSize: 12)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ...children,
+      ],
+    ),
+  );
+
+  Widget _chip(
+    String text,
+    bool selected,
+    VoidCallback onTap, {
+    bool square = false,
+  }) => FilterChip(
+    label: Text(text),
+    selected: selected,
+    onSelected: (_) => onTap(),
+    showCheckmark: !square,
+    checkmarkColor: _yellow,
+    selectedColor: consultGreen,
+    backgroundColor: Colors.white,
+    labelStyle: TextStyle(
+      color: selected ? Colors.white : _ink,
+      fontSize: 14,
+      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+    ),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(square ? 14 : 28),
+    ),
+    side: BorderSide(color: selected ? consultGreen : _line, width: 1.5),
+  );
+
+  Widget _conditionCard(
+    int number,
+    String title,
+    String type,
+    List<String> options,
+  ) {
+    final custom = _conditions
+        .where(
+          (r) => r['condition_type'] == type && !options.contains(r['label']),
+        )
+        .toList();
+    return _card(number, title, [
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final label in options)
+            _chip(label, _selected(type, label), () => _toggle(type, label)),
+          _chip(
+            '기타',
+            custom.isNotEmpty,
+            () => setState(() {
+              if (custom.isNotEmpty) {
+                _conditions.removeWhere(custom.contains);
+              } else if (_conditions.length < 30) {
+                _conditions.removeWhere(
+                  (r) =>
+                      r['condition_type'] == type &&
+                      ['알러지 없음', '해당 없음'].contains(r['label']),
+                );
+                _conditions.add({
+                  '_key': _rowKey++,
+                  'condition_type': type,
+                  'label': '',
+                });
+              }
+            }),
+          ),
+        ],
+      ),
+      for (final row in custom) ...[
+        const SizedBox(height: 16),
+        Text(
+          type == 'allergy' ? '기타 알러지를 직접 적어주세요' : '기타 질환을 직접 적어주세요',
+          style: const TextStyle(
+            color: consultGreen,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          key: ValueKey(row['_key']),
+          initialValue: row['label'] as String? ?? '',
+          maxLength: 200,
+          decoration: _input(
+            type == 'allergy' ? '예: 땅콩, 특정 약 이름' : '질환 이름을 입력해주세요',
+          ),
+          onChanged: (v) => row['label'] = v,
+          validator: (v) =>
+              v == null || v.trim().isEmpty ? '내용을 입력해주세요.' : null,
+        ),
+      ],
+    ], hint: '복수 선택');
+  }
+
+  bool get _pregnancyNone =>
+      _selected('pregnancy', '해당 없음') && _selected('breastfeeding', '해당 없음');
+  void _pregnancy(String label) => setState(() {
+    final none = label == '해당 없음';
+    final type = label == '임신 중' ? 'pregnancy' : 'breastfeeding';
+    final selected = none ? _pregnancyNone : _selected(type, label);
+    _conditions.removeWhere(
+      (r) =>
+          ['pregnancy', 'breastfeeding'].contains(r['condition_type']) &&
+          (none ||
+              r['label'] == '해당 없음' ||
+              (r['condition_type'] == type && r['label'] == label)),
+    );
+    if (!selected) {
+      for (final t in none ? ['pregnancy', 'breastfeeding'] : [type]) {
+        if (_conditions.length < 30) {
+          _conditions.add({
+            '_key': _rowKey++,
+            'condition_type': t,
+            'label': label,
+          });
+        }
+      }
+    }
+  });
+
+  Widget _medication(Map<String, dynamic> row) => Container(
+    key: ValueKey(row['_key']),
+    margin: const EdgeInsets.only(bottom: 8),
+    decoration: BoxDecoration(
+      color: const Color(0xFFE8F4EF),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: ListTile(
+      contentPadding: const EdgeInsets.only(left: 16, right: 4),
+      leading: const Icon(
+        Icons.medication_outlined,
+        size: 20,
+        color: consultGreen,
+      ),
+      title: Text(
+        row['drug_name'] as String,
+        style: const TextStyle(
+          color: _ink,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: (row['dosage_note'] as String? ?? '').isEmpty
+          ? null
+          : Text(row['dosage_note'] as String),
+      onTap: () async {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('복용약 수정'),
+            content: SingleChildScrollView(child: _row(row, true)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('닫기'),
+              ),
+            ],
+          ),
+        );
+        if (mounted) setState(() {});
+      },
+      trailing: IconButton(
+        tooltip: '복용약 삭제',
+        icon: const Icon(Icons.close, color: consultGreen),
+        onPressed: () => setState(() => _medications.remove(row)),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => Theme(
     data: Theme.of(context).copyWith(
       colorScheme: Theme.of(context).colorScheme
           .copyWith(primary: consultGreen, onPrimary: Colors.white),
     ),
-    child: _buildPage(context),
-  );
-
-  Widget _buildPage(BuildContext context) => Scaffold(
-    // 저장 버튼은 스크롤 목록 밖 하단에 고정해 기기 하단 바와 겹치지 않게 한다.
-    bottomNavigationBar: _revision == null
-        ? null
-        : SafeArea(
-            top: false,
-            child: Padding(
-              // 기기 하단 바 높이와 별개로 여유를 둬 버튼이 가려지지 않게 한다.
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 32),
-              child: SizedBox(
-                height: 52,
-                child: FilledButton(
-                  onPressed: _busy ? null : _save,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: consultGreen,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+    child: Scaffold(
+      backgroundColor: _cream,
+      appBar: AppBar(
+        backgroundColor: _cream,
+        foregroundColor: _ink,
+        title: const Text('상담 참고사항'),
+        actions: [
+          IconButton(
+            onPressed: _busy ? null : _reload,
+            tooltip: '다시 불러오기',
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (_busy) const LinearProgressIndicator(),
+          if (_notice != null)
+            Padding(padding: const EdgeInsets.all(24), child: Text(_notice!)),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(_error!, style: const TextStyle(color: Colors.red)),
+            ),
+          if (_error != null && !_busy)
+            TextButton.icon(
+              onPressed: _reload,
+              icon: const Icon(Icons.refresh),
+              label: const Text('다시 불러오기'),
+            ),
+          if (_revision != null)
+            Expanded(
+              child: AbsorbPointer(
+                absorbing: _busy,
+                child: Form(
+                  key: _form,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFBE985),
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: const Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: consultGreen,
+                              child: Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '한 번 적어두면 상담할 때마다 다시 설명하지 않아도 돼요.',
+                                style: TextStyle(
+                                  color: _ink,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      _conditionCard(1, '알러지', 'allergy', _allergies),
+                      _conditionCard(2, '앓고 있는 질환', 'disease', _diseases),
+                      _card(3, '임신 · 수유 여부', [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final label in ['해당 없음', '임신 중', '수유 중'])
+                              _chip(
+                                label,
+                                label == '해당 없음'
+                                    ? _pregnancyNone
+                                    : _selected(
+                                        label == '임신 중'
+                                            ? 'pregnancy'
+                                            : 'breastfeeding',
+                                        label,
+                                      ),
+                                () => _pregnancy(label),
+                                square: true,
+                              ),
+                          ],
+                        ),
+                        for (final row in _conditions.where(
+                          (r) =>
+                              [
+                                'pregnancy',
+                                'breastfeeding',
+                              ].contains(r['condition_type']) &&
+                              !['해당 없음', '임신 중', '수유 중'].contains(r['label']),
+                        ))
+                          _row(row, false),
+                        const SizedBox(height: 14),
+                        const Text(
+                          '임신 중이거나 수유 중이면 복용할 수 없는 약이 있어요.',
+                          style: TextStyle(color: _muted, fontSize: 12),
+                        ),
+                      ]),
+                      _card(4, '현재 복용 중인 약', [
+                        for (final row in _medications) _medication(row),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _drug,
+                                maxLength: 200,
+                                decoration: _input('약 이름을 입력하세요'),
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) => _addDrug(),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 50,
+                              height: 54,
+                              child: FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: _yellow,
+                                  foregroundColor: _ink,
+                                  padding: EdgeInsets.zero,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                onPressed: _medications.length >= 30
+                                    ? null
+                                    : _addDrug,
+                                child: const Icon(Icons.add, size: 28),
+                              ),
+                            ),
+                          ],
+                        ),
+                        for (final row in _readOnly)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(
+                              Icons.lock_outline,
+                              size: 18,
+                              color: _muted,
+                            ),
+                            title: Text(row['drug_name'] as String),
+                            subtitle: Text(
+                              '구매·처방 기록 (조회 전용)\n${row['dosage_note'] ?? ''}',
+                            ),
+                          ),
+                      ]),
+                      _card(5, '기타 참고사항', [
+                        TextFormField(
+                          controller: _note,
+                          maxLength: 500,
+                          maxLines: 5,
+                          decoration: _input(
+                            '증상, 약을 먹고 불편했던 경험, 약사님께 묻고 싶은 점을 자유롭게 적어주세요',
+                          ),
+                        ),
+                        for (final row in _conditions.where(
+                          (r) => ![
+                            'allergy',
+                            'disease',
+                            'pregnancy',
+                            'breastfeeding',
+                          ].contains(r['condition_type']),
+                        ))
+                          _row(row, false),
+                      ], hint: '선택'),
+                      const Text(
+                        '미입력 항목은 “해당 없음”을 의미하지 않습니다.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: _muted, fontSize: 12),
+                      ),
+                    ],
                   ),
-                  child: const Text('참고사항 저장'),
                 ),
               ),
             ),
-          ),
-    appBar: AppBar(
-      title: const Text('상담 참고사항'),
-      actions: [
-        IconButton(
-          onPressed: _busy ? null : _reload,
-          icon: const Icon(Icons.refresh),
-          tooltip: '다시 불러오기',
-        ),
-      ],
-    ),
-    body: Column(
-      children: [
-        if (_busy) const LinearProgressIndicator(),
-        if (_notice != null)
-          Padding(padding: const EdgeInsets.all(24), child: Text(_notice!)),
-        if (_error != null && !_busy)
-          TextButton.icon(
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-            label: const Text('다시 불러오기'),
-          ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(_error!, style: const TextStyle(color: Colors.red)),
-          ),
-        if (_revision != null)
-          Expanded(
-            child: AbsorbPointer(
-              absorbing: _busy,
-              child: Form(
-                key: _form,
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
+        ],
+      ),
+      bottomNavigationBar: _revision == null
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      '저장한 내용은 약사 상담 시 전달됩니다. 미등록 항목은 “해당 없음”을 의미하지 않습니다.',
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      '알러지·질환·임신·수유',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    for (final row in _conditions) _row(row, false),
-                    TextButton.icon(
-                      onPressed: _conditions.length >= 30
-                          ? null
-                          : () => setState(
-                              () => _conditions.add({
-                                '_key': _rowKey++,
-                                'condition_type': 'allergy',
-                                'label': '',
-                              }),
-                            ),
-                      icon: const Icon(Icons.add),
-                      label: const Text('참고사항 추가'),
-                    ),
-                    const Text(
-                      '현재 복용약',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    for (final row in _medications) _row(row, true),
-                    TextButton.icon(
-                      onPressed: _medications.length >= 30
-                          ? null
-                          : () => setState(
-                              () => _medications.add({
-                                '_key': _rowKey++,
-                                'drug_name': '',
-                              }),
-                            ),
-                      icon: const Icon(Icons.add),
-                      label: const Text('복용약 추가'),
-                    ),
-                    for (final row in _readOnly)
-                      ListTile(
-                        title: Text(row['drug_name'] as String),
-                        subtitle: Text(
-                          '구매·처방 기록 (이 화면에서 수정하지 않음)\n${row['dosage_note'] ?? ''}',
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: FilledButton(
+                        onPressed: _busy ? null : _save,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: consultGreen,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                        child: Text(
+                          _busy ? '저장 중...' : '저장하기',
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
-                    TextFormField(
-                      controller: _note,
-                      maxLength: 500,
-                      maxLines: 4,
-                      decoration: const InputDecoration(labelText: '기타 메모'),
                     ),
+                    const SizedBox(height: 12),
                     const Text(
-                      '직접 입력한 내용은 약사의 확인용 정보입니다. 약품·성분 코드로 자동 판정되는 정보는 아닙니다.',
-                      style: TextStyle(fontSize: 12),
+                      '약사님과 상담할 때 반영됩니다.',
+                      style: TextStyle(color: _muted, fontSize: 12),
                     ),
                   ],
                 ),
               ),
             ),
-          ),
-      ],
     ),
   );
 
   @override
   void dispose() {
     _note.dispose();
+    _drug.dispose();
     if (widget.api == null) _api.close();
     super.dispose();
   }

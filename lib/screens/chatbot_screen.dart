@@ -165,7 +165,7 @@ class _ChatPageState extends State<ChatPage> {
 
   void _explainPill(String name) {
     if (_busy) return;
-    _messageController.text = '${name}에 대해 설명해 주세요. 효능이랑 주의사항도 알려 주세요.';
+    _messageController.text = '$name에 대해 설명해 주세요. 효능이랑 주의사항도 알려 주세요.';
     _sendMessage();
   }
 
@@ -213,6 +213,15 @@ class _ChatPageState extends State<ChatPage> {
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
               children: [
                 const _TrustLine(),
+                const SizedBox(height: 10),
+                _AnswerCard(
+                  answer: '안녕하세요, 전 모약이에요!\n약에 대해 궁금하신 점이 있나요?',
+                  showFeedback: false,
+                  sources: const [],
+                  evidence: const [],
+                  recommendations: const [],
+                  onOpenEvidence: _showEvidence,
+                ),
                 for (final message in _messages) ...[
                   const SizedBox(height: 10),
                   if (message['photos'] != null)
@@ -354,6 +363,7 @@ class _AnswerCard extends StatefulWidget {
     required this.evidence,
     required this.onOpenEvidence,
     this.recommendations = const [],
+    this.showFeedback = true,
   });
 
   final String answer;
@@ -363,6 +373,7 @@ class _AnswerCard extends StatefulWidget {
 
   /// 증상 추천 답변일 때 서버가 약마다 나눠준 카드 데이터. 비어 있으면 answer 원문을 그대로 보여준다.
   final List<Map> recommendations;
+  final bool showFeedback;
 
   @override
   State<_AnswerCard> createState() => _AnswerCardState();
@@ -483,58 +494,63 @@ class _AnswerCardState extends State<_AnswerCard> {
           ),
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            if (widget.evidence.isNotEmpty) ...[
-              Expanded(
-                child: _CardAction(
-                  background: consultMint,
-                  onTap: () => widget.onOpenEvidence(widget.evidence),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.menu_book_outlined,
-                        color: consultDeepGreen,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '원문 근거 보기 (${widget.evidence.length})',
-                        style: const TextStyle(
+        if (widget.showFeedback || widget.evidence.isNotEmpty)
+          Row(
+            children: [
+              if (widget.evidence.isNotEmpty) ...[
+                Expanded(
+                  child: _CardAction(
+                    background: consultMint,
+                    onTap: () => widget.onOpenEvidence(widget.evidence),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.menu_book_outlined,
                           color: consultDeepGreen,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '원문 근거 보기 (${widget.evidence.length})',
+                          style: const TextStyle(
+                            color: consultDeepGreen,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ] else
+                const Spacer(),
+              if (widget.showFeedback)
+                _CardAction(
+                  background: _helpful ? consultMint : consultBeige,
+                  onTap: () => setState(() => _helpful = !_helpful),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.thumb_up_outlined,
+                        color: consultMutedBrown,
+                        size: 16,
+                      ),
+                      SizedBox(width: 5),
+                      Text(
+                        '도움돼요',
+                        style: TextStyle(
+                          color: consultMutedBrown,
+                          fontSize: 12,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-            ] else
-              const Spacer(),
-            _CardAction(
-              background: _helpful ? consultMint : consultBeige,
-              onTap: () => setState(() => _helpful = !_helpful),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.thumb_up_outlined,
-                    color: consultMutedBrown,
-                    size: 16,
-                  ),
-                  SizedBox(width: 5),
-                  Text(
-                    '도움돼요',
-                    style: TextStyle(color: consultMutedBrown, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+            ],
+          ),
         const SizedBox(height: 12),
         Text(
           '참고 약품: ${widget.sources.isEmpty ? '없음' : widget.sources.join(', ')}',
